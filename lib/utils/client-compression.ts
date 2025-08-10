@@ -60,9 +60,15 @@ export async function compressScreenshotClientSmart(
     // If original is already small enough, use standard compression
     if (originalSizeBytes <= targetSizeBytes) {
       const result = await compressWithLevel(img, deviceType, CLIENT_COMPRESSION_LEVELS[0])
+      const compressedSize = getClientBase64SizeInBytes(result.compressedImage)
+      const compressedSizeKB = Math.round(compressedSize / 1024)
+      
       return {
-        ...result,
+        compressedImage: result.compressedImage,
         originalSizeKB,
+        compressedSizeKB,
+        compressionRatio: compressedSize / originalSizeBytes,
+        appliedQuality: 90, // Standard quality for CLIENT_COMPRESSION_LEVELS[0]
         warnings
       }
     }

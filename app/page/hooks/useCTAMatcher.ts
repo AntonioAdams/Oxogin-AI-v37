@@ -21,14 +21,57 @@ export function useCTAMatcher(imageSize: { width: number; height: number }) {
 
         if (!t1 || !t2) return 0
         if (t1 === t2) return 1.0
-        if (t1.includes(t2) || t2.includes(t1)) return 0.8
+        if (t1.includes(t2) || t2.includes(t1)) return 0.85
+
+        // Enhanced fuzzy matching with CTA synonyms
+        const ctaSynonyms: { [key: string]: string[] } = {
+          'join': ['sign up', 'register', 'get started', 'start', 'signup'],
+          'start': ['get started', 'begin', 'join', 'sign up', 'launch'],
+          'shop': ['buy', 'purchase', 'order', 'get', 'browse'],
+          'learn': ['start learning', 'study', 'explore', 'discover'],
+          'get': ['obtain', 'receive', 'start', 'grab', 'download'],
+          'try': ['test', 'demo', 'sample', 'experience'],
+          'book': ['schedule', 'reserve', 'appointment'],
+          'contact': ['reach out', 'get in touch', 'talk'],
+          'more': ['options', 'details', 'info', 'information']
+        }
+
+        // Check synonym matching
+        for (const [key, synonyms] of Object.entries(ctaSynonyms)) {
+          if ((t1.includes(key) && synonyms.some(syn => t2.includes(syn))) ||
+              (t2.includes(key) && synonyms.some(syn => t1.includes(syn))) ||
+              (synonyms.some(syn => t1.includes(syn)) && synonyms.some(syn => t2.includes(syn)))) {
+            return 0.75
+          }
+        }
 
         const words1 = t1.split(/\s+/).filter((word) => word.length > 0)
         const words2 = t2.split(/\s+/).filter((word) => word.length > 0)
-        const commonWords = words1.filter((word) => words2.includes(word))
+        
+        // Enhanced partial word matching
+        let partialMatches = 0
+        for (const word1 of words1) {
+          for (const word2 of words2) {
+            // Exact word match
+            if (word1 === word2) {
+              partialMatches += 1
+            }
+            // Partial word match (minimum 3 characters)
+            else if (word1.length >= 3 && word2.length >= 3) {
+              if (word1.includes(word2) || word2.includes(word1)) {
+                partialMatches += 0.7
+              }
+              // Common prefixes/suffixes for action words
+              else if ((word1.startsWith(word2.slice(0, 3)) && word1.length > 3) ||
+                       (word2.startsWith(word1.slice(0, 3)) && word2.length > 3)) {
+                partialMatches += 0.5
+              }
+            }
+          }
+        }
 
-        if (commonWords.length === 0) return 0
-        return commonWords.length / Math.max(words1.length, words2.length)
+        if (partialMatches === 0) return 0
+        return Math.min(0.9, partialMatches / Math.max(words1.length, words2.length))
       }
 
       private calculatePriority(coordinates: ElementCoordinates): {
@@ -87,7 +130,7 @@ export function useCTAMatcher(imageSize: { width: number; height: number }) {
             priorityScore: score,
           })
 
-          if (button.text && button.text.trim() && bestSimilarity > 0.6) {
+          if (button.text && button.text.trim() && bestSimilarity > 0.3) {
             candidates.push({
               coordinates: button.coordinates,
               text: button.text,
@@ -117,7 +160,7 @@ export function useCTAMatcher(imageSize: { width: number; height: number }) {
             priorityScore: score,
           })
 
-          if (link.text && link.text.trim() && bestSimilarity > 0.6) {
+          if (link.text && link.text.trim() && bestSimilarity > 0.3) {
             candidates.push({
               coordinates: link.coordinates,
               text: link.text,
@@ -169,6 +212,113 @@ export function useCTAMatcher(imageSize: { width: number; height: number }) {
             return b.confidence - a.confidence
           })
           bestMatch = otherAboveFoldCandidates[0]
+        }
+
+        // FALLBACK STRATEGY: If no text matches found, implement intelligent fallbacks
+        if (!bestMatch) {
+          moduleLogger.debug("No text matches found, implementing fallback strategies", {
+            totalDebugInfo: debugInfo.length,
+            searchTexts
+          })
+
+          // Fallback 1: Find highest similarity score even if below threshold
+          const allElementsWithSimilarity = debugInfo.filter(info => info.similarity > 0)
+          if (allElementsWithSimilarity.length > 0) {
+            // Sort by similarity score, then by priority score
+            allElementsWithSimilarity.sort((a, b) => {
+              if (Math.abs(a.similarity - b.similarity) > 0.05) {
+                return b.similarity - a.similarity
+              }
+              return b.priorityScore - a.priorityScore
+            })
+
+            const fallbackElement = allElementsWithSimilarity[0]
+            // Find the corresponding button/link data
+            const originalElement = [...domData.buttons, ...domData.links].find(
+              el => el.text === fallbackElement.text && 
+                    el.coordinates.x === fallbackElement.coordinates.x &&
+                    el.coordinates.y === fallbackElement.coordinates.y
+            )
+
+            if (originalElement) {
+              bestMatch = {
+                coordinates: originalElement.coordinates,
+                text: originalElement.text || 'Unknown',
+                type: fallbackElement.type as 'button' | 'link',
+                confidence: fallbackElement.similarity,
+                priority: fallbackElement.priority,
+                priorityScore: fallbackElement.priorityScore
+              }
+              moduleLogger.debug("Fallback 1 successful - using highest similarity element", {
+                text: bestMatch.text,
+                similarity: fallbackElement.similarity
+              })
+            }
+          }
+
+          // Fallback 2: If still no match, use highest priority score in hero section
+          if (!bestMatch) {
+            const heroElements = debugInfo.filter(
+              info => info.coordinates.y >= 150 && info.coordinates.y < 800
+            )
+            if (heroElements.length > 0) {
+              heroElements.sort((a, b) => b.priorityScore - a.priorityScore)
+              const fallbackElement = heroElements[0]
+              
+              const originalElement = [...domData.buttons, ...domData.links].find(
+                el => el.text === fallbackElement.text && 
+                      el.coordinates.x === fallbackElement.coordinates.x &&
+                      el.coordinates.y === fallbackElement.coordinates.y
+              )
+
+              if (originalElement) {
+                bestMatch = {
+                  coordinates: originalElement.coordinates,
+                  text: originalElement.text || 'Unknown',
+                  type: fallbackElement.type as 'button' | 'link',
+                  confidence: 0.25, // Low confidence for fallback
+                  priority: fallbackElement.priority,
+                  priorityScore: fallbackElement.priorityScore
+                }
+                moduleLogger.debug("Fallback 2 successful - using highest priority hero element", {
+                  text: bestMatch.text,
+                  priorityScore: fallbackElement.priorityScore
+                })
+              }
+            }
+          }
+
+          // Fallback 3: Last resort - use any high-priority element above fold
+          if (!bestMatch) {
+            const aboveFoldElements = debugInfo.filter(
+              info => info.coordinates.y < 1000
+            )
+            if (aboveFoldElements.length > 0) {
+              aboveFoldElements.sort((a, b) => b.priorityScore - a.priorityScore)
+              const fallbackElement = aboveFoldElements[0]
+              
+              const originalElement = [...domData.buttons, ...domData.links].find(
+                el => el.text === fallbackElement.text && 
+                      el.coordinates.x === fallbackElement.coordinates.x &&
+                      el.coordinates.y === fallbackElement.coordinates.y
+              )
+
+              if (originalElement) {
+                bestMatch = {
+                  coordinates: originalElement.coordinates,
+                  text: originalElement.text || 'Unknown',
+                  type: fallbackElement.type as 'button' | 'link',
+                  confidence: 0.2, // Very low confidence for last resort
+                  priority: fallbackElement.priority,
+                  priorityScore: fallbackElement.priorityScore
+                }
+                moduleLogger.debug("Fallback 3 successful - using highest priority above-fold element", {
+                  text: bestMatch.text,
+                  priorityScore: fallbackElement.priorityScore
+                })
+              }
+            }
+          }
         }
 
         // Handle form association (preserve existing logic)
