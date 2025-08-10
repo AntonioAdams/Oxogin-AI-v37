@@ -3,7 +3,7 @@ import { captureWebsite } from "@/lib/capture"
 import { generateText } from "ai"
 import { openai } from "@ai-sdk/openai"
 import { compressScreenshotForOpenAI, validatePayloadSize, SIZE_LIMITS } from "@/lib/utils/screenshot-compression"
-import { predictClicks } from "@/lib/prediction/engine"
+import { clickPredictionEngine } from "@/lib/prediction/engine"
 
 export async function POST(request: NextRequest) {
   try {
@@ -147,10 +147,25 @@ JSON OUTPUT:
     let primaryCTAPrediction: any = null
 
     try {
-      if (desktopCaptureResult.domData) {
-        const predictions = await predictClicks(desktopCaptureResult.domData, false)
+      if (desktopCaptureResult.domData?.elements) {
+        const context = {
+          url: competitorUrl,
+          deviceType: "desktop" as const,
+          userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+          viewport: { width: 1280, height: 720 },
+          timestamp: Date.now()
+        }
+        
+        const predictions = await clickPredictionEngine.predictClicks(desktopCaptureResult.domData.elements, context)
         clickPredictions = predictions.predictions || []
-        primaryCTAPrediction = predictions.primaryCTA || null
+        
+        // Find primary CTA (highest predicted clicks)
+        if (clickPredictions.length > 0) {
+          primaryCTAPrediction = clickPredictions.reduce((max, current) => 
+            current.predictedClicks > max.predictedClicks ? current : max
+          )
+        }
+        
         console.log(`[Competitor Analysis] Generated ${clickPredictions.length} click predictions`)
       }
     } catch (predictionError) {
