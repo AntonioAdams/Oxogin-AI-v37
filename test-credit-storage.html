@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Credit Storage Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .test-result {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+        }
+        button {
+            padding: 8px 16px;
+            margin: 5px;
+            border: none;
+            border-radius: 4px;
+            background-color: #007bff;
+            color: white;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        #storage-contents {
+            background-color: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <h1>Credit Storage Test for Anonymous Users</h1>
+    <p>This test verifies that credit storage works correctly in localStorage for anonymous users.</p>
+    
+    <div>
+        <button onclick="testInitialBalance()">Test Initial Balance</button>
+        <button onclick="testDeductCredits()">Test Deduct Credits</button>
+        <button onclick="testResetCredits()">Test Reset Credits</button>
+        <button onclick="testClearUserData()">Test Clear User Data</button>
+        <button onclick="showStorageContents()">Show Storage Contents</button>
+        <button onclick="clearAllTests()">Clear All Tests</button>
+    </div>
+
+    <div id="test-results"></div>
+    <div id="storage-contents"></div>
+
+    <script>
+        // Simplified version of the fallback credit storage for testing
+        class TestFallbackCreditStorage {
+            getStorageKey(key) {
+                return `cta-tool-credits-${key}`;
+            }
+
+            isStorageAvailable() {
+                try {
+                    const testKey = "__storage_test__";
+                    localStorage.setItem(testKey, "test");
+                    localStorage.removeItem(testKey);
+                    return true;
+                } catch {
+                    return false;
+                }
+            }
+
+            async getBalance(userId) {
+                try {
+                    if (!this.isStorageAvailable()) {
+                        return null;
+                    }
+
+                    const balanceData = localStorage.getItem(this.getStorageKey(`balance-${userId}`));
+                    if (!balanceData) {
+                        return null;
+                    }
+
+                    const balance = JSON.parse(balanceData);
+                    return {
+                        userId: balance.userId,
+                        totalCredits: balance.totalCredits,
+                        usedCredits: balance.usedCredits,
+                        remainingCredits: balance.remainingCredits,
+                        lastUpdated: new Date(balance.lastUpdated),
+                        resetDate: new Date(balance.resetDate),
+                    };
+                } catch (error) {
+                    console.error("Error getting balance from fallback storage", error);
+                    return null;
+                }
+            }
+
+            async setBalance(balance) {
+                try {
+                    if (!this.isStorageAvailable()) {
+                        return;
+                    }
+
+                    const balanceData = {
+                        userId: balance.userId,
+                        totalCredits: balance.totalCredits,
+                        usedCredits: balance.usedCredits,
+                        remainingCredits: balance.remainingCredits,
+                        lastUpdated: balance.lastUpdated.toISOString(),
+                        resetDate: balance.resetDate.toISOString(),
+                    };
+
+                    localStorage.setItem(this.getStorageKey(`balance-${balance.userId}`), JSON.stringify(balanceData));
+                    console.log("Balance saved to fallback storage", { userId: balance.userId, remainingCredits: balance.remainingCredits });
+                } catch (error) {
+                    console.error("Error saving balance to fallback storage", error);
+                }
+            }
+
+            async getCurrentUserId() {
+                try {
+                    if (!this.isStorageAvailable()) {
+                        return null;
+                    }
+
+                    // Try to get existing anonymous user ID
+                    const existingUserId = localStorage.getItem(this.getStorageKey("anonymous-user-id"));
+                    if (existingUserId) {
+                        return existingUserId;
+                    }
+
+                    // Generate new anonymous user ID
+                    const newUserId = this.generateUUID();
+                    localStorage.setItem(this.getStorageKey("anonymous-user-id"), newUserId);
+                    return newUserId;
+                } catch (error) {
+                    console.error("Error getting current user ID from fallback storage", error);
+                    return null;
+                }
+            }
+
+            async setCurrentUserId(userId) {
+                try {
+                    if (!this.isStorageAvailable()) {
+                        return;
+                    }
+
+                    localStorage.setItem(this.getStorageKey("anonymous-user-id"), userId);
+                } catch (error) {
+                    console.error("Error saving user ID to fallback storage", error);
+                }
+            }
+
+            async clearUserData(userId) {
+                try {
+                    if (!this.isStorageAvailable()) {
+                        return;
+                    }
+
+                    localStorage.removeItem(this.getStorageKey(`balance-${userId}`));
+                    localStorage.removeItem(this.getStorageKey(`transactions-${userId}`));
+                    console.log("User data cleared from fallback storage", { userId });
+                } catch (error) {
+                    console.error("Error clearing user data from fallback storage", error);
+                }
+            }
+
+            generateUUID() {
+                return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                    const r = Math.random() * 16 | 0;
+                    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+                    return v.toString(16);
+                });
+            }
+        }
+
+        const storage = new TestFallbackCreditStorage();
+
+        function addResult(message, type = 'info') {
+            const resultsDiv = document.getElementById('test-results');
+            const resultDiv = document.createElement('div');
+            resultDiv.className = `test-result ${type}`;
+            resultDiv.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            resultsDiv.appendChild(resultDiv);
+        }
+
+        async function testInitialBalance() {
+            try {
+                addResult('Testing initial balance creation...', 'info');
+                
+                // Get or create user ID
+                const userId = await storage.getCurrentUserId();
+                addResult(`Generated/Retrieved user ID: ${userId}`, 'success');
+
+                // Check if balance exists
+                let balance = await storage.getBalance(userId);
+                
+                if (!balance) {
+                    // Create initial balance
+                    balance = {
+                        userId: userId,
+                        totalCredits: 10,
+                        usedCredits: 0,
+                        remainingCredits: 10,
+                        lastUpdated: new Date(),
+                        resetDate: new Date(Date.now() + 24 * 60 * 60 * 1000),
+                    };
+                    
+                    await storage.setBalance(balance);
+                    addResult('Created new balance: 10 credits', 'success');
+                } else {
+                    addResult(`Retrieved existing balance: ${balance.remainingCredits} credits`, 'success');
+                }
+
+                showStorageContents();
+            } catch (error) {
+                addResult(`Error testing initial balance: ${error.message}`, 'error');
+            }
+        }
+
+        async function testDeductCredits() {
+            try {
+                addResult('Testing credit deduction...', 'info');
+                
+                const userId = await storage.getCurrentUserId();
+                let balance = await storage.getBalance(userId);
+                
+                if (!balance) {
+                    addResult('No balance found. Please test initial balance first.', 'error');
+                    return;
+                }
+
+                if (balance.remainingCredits < 2) {
+                    addResult(`Insufficient credits. Have ${balance.remainingCredits}, need 2.`, 'error');
+                    return;
+                }
+
+                // Deduct 2 credits
+                balance.usedCredits += 2;
+                balance.remainingCredits -= 2;
+                balance.lastUpdated = new Date();
+
+                await storage.setBalance(balance);
+                addResult(`Deducted 2 credits. Remaining: ${balance.remainingCredits}`, 'success');
+
+                showStorageContents();
+            } catch (error) {
+                addResult(`Error deducting credits: ${error.message}`, 'error');
+            }
+        }
+
+        async function testResetCredits() {
+            try {
+                addResult('Testing credit reset...', 'info');
+                
+                const userId = await storage.getCurrentUserId();
+                
+                const resetBalance = {
+                    userId: userId,
+                    totalCredits: 10,
+                    usedCredits: 0,
+                    remainingCredits: 10,
+                    lastUpdated: new Date(),
+                    resetDate: new Date(Date.now() + 24 * 60 * 60 * 1000),
+                };
+
+                await storage.setBalance(resetBalance);
+                addResult('Reset credits to 10', 'success');
+
+                showStorageContents();
+            } catch (error) {
+                addResult(`Error resetting credits: ${error.message}`, 'error');
+            }
+        }
+
+        async function testClearUserData() {
+            try {
+                addResult('Testing clear user data...', 'info');
+                
+                const userId = await storage.getCurrentUserId();
+                await storage.clearUserData(userId);
+                
+                // Also clear the user ID itself
+                localStorage.removeItem(storage.getStorageKey("anonymous-user-id"));
+                
+                addResult('Cleared all user data', 'success');
+
+                showStorageContents();
+            } catch (error) {
+                addResult(`Error clearing user data: ${error.message}`, 'error');
+            }
+        }
+
+        function showStorageContents() {
+            const storageDiv = document.getElementById('storage-contents');
+            const contents = [];
+            
+            contents.push('=== LocalStorage Contents (Credit-related) ===');
+            
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key && key.startsWith('cta-tool-credits-')) {
+                    const value = localStorage.getItem(key);
+                    contents.push(`${key}: ${value}`);
+                }
+            }
+            
+            if (contents.length === 1) {
+                contents.push('(No credit-related data found)');
+            }
+            
+            storageDiv.textContent = contents.join('\n');
+        }
+
+        function clearAllTests() {
+            document.getElementById('test-results').innerHTML = '';
+            document.getElementById('storage-contents').innerHTML = '';
+        }
+
+        // Show initial storage contents
+        showStorageContents();
+    </script>
+</body>
+</html>

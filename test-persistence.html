@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analysis Persistence Test</title>
+</head>
+<body>
+    <h1>Analysis Persistence Test</h1>
+    <div id="results"></div>
+    
+    <script>
+        // Test the analysis storage functionality
+        function testAnalysisStorage() {
+            const results = document.getElementById('results');
+            results.innerHTML = '<h2>Testing Analysis Storage...</h2>';
+            
+            // Check if localStorage is available
+            if (typeof localStorage === 'undefined') {
+                results.innerHTML += '<p style="color: red;">❌ localStorage is not available</p>';
+                return;
+            }
+            
+            results.innerHTML += '<p style="color: green;">✅ localStorage is available</p>';
+            
+            // Check for existing analyses
+            const storageKey = 'cta-detector-analyses';
+            const existingData = localStorage.getItem(storageKey);
+            
+            if (existingData) {
+                try {
+                    const analyses = JSON.parse(existingData);
+                    results.innerHTML += `<p style="color: green;">✅ Found ${analyses.length} saved analyses</p>`;
+                    
+                    // Display the analyses
+                    analyses.forEach((analysis, index) => {
+                        results.innerHTML += `
+                            <div style="border: 1px solid #ccc; margin: 10px 0; padding: 10px;">
+                                <h3>Analysis ${index + 1}: ${analysis.title || analysis.url}</h3>
+                                <p><strong>ID:</strong> ${analysis.id}</p>
+                                <p><strong>URL:</strong> ${analysis.url}</p>
+                                <p><strong>Timestamp:</strong> ${new Date(analysis.timestamp).toLocaleString()}</p>
+                                <p><strong>Has Desktop CRO Analysis:</strong> ${analysis.desktopCroAnalysisResult ? '✅ Yes' : '❌ No'}</p>
+                                <p><strong>Has Mobile CRO Analysis:</strong> ${analysis.mobileCroAnalysisResult ? '✅ Yes' : '❌ No'}</p>
+                                <p><strong>Has Desktop Tooltip:</strong> ${analysis.desktopShowTooltip ? '✅ Yes' : '❌ No'}</p>
+                                <p><strong>Has Mobile Tooltip:</strong> ${analysis.mobileShowTooltip ? '✅ Yes' : '❌ No'}</p>
+                                <p><strong>Desktop Click Predictions:</strong> ${analysis.desktopClickPredictions?.length || 0}</p>
+                                <p><strong>Mobile Click Predictions:</strong> ${analysis.mobileClickPredictions?.length || 0}</p>
+                            </div>
+                        `;
+                    });
+                } catch (error) {
+                    results.innerHTML += `<p style="color: red;">❌ Error parsing saved analyses: ${error.message}</p>`;
+                }
+            } else {
+                results.innerHTML += '<p style="color: orange;">⚠️ No saved analyses found</p>';
+            }
+            
+            // Test saving a new analysis
+            results.innerHTML += '<h2>Testing Save Functionality...</h2>';
+            
+            const testAnalysis = {
+                id: `test_${Date.now()}`,
+                url: 'https://example.com',
+                title: 'Test Analysis',
+                timestamp: new Date().toISOString(),
+                desktopCaptureResult: { screenshot: 'data:image/png;base64,test' },
+                desktopAnalysisResult: { text: 'Test CTA' },
+                desktopMatchedElement: { text: 'Test Button' },
+                desktopDebugMatches: [],
+                desktopImageSize: { width: 1200, height: 800 },
+                desktopFormBoundaryBoxes: [],
+                desktopClickPredictions: [{ elementId: 'test', text: 'Test', ctr: 0.065 }],
+                desktopShowTooltip: true,
+                desktopPrimaryCTAPrediction: { elementId: 'test', text: 'Test', ctr: 0.065 },
+                desktopCroAnalysisResult: { recommendations: ['Test recommendation'] },
+                mobileCaptureResult: null,
+                mobileAnalysisResult: null,
+                mobileMatchedElement: null,
+                mobileDebugMatches: [],
+                mobileImageSize: { width: 0, height: 0 },
+                mobileFormBoundaryBoxes: [],
+                mobileClickPredictions: [],
+                mobileShowTooltip: false,
+                mobilePrimaryCTAPrediction: null,
+                mobileCroAnalysisResult: null
+            };
+            
+            try {
+                const existingAnalyses = existingData ? JSON.parse(existingData) : [];
+                const updatedAnalyses = [testAnalysis, ...existingAnalyses].slice(0, 3); // Keep only 3 analyses
+                localStorage.setItem(storageKey, JSON.stringify(updatedAnalyses));
+                results.innerHTML += '<p style="color: green;">✅ Test analysis saved successfully</p>';
+            } catch (error) {
+                results.innerHTML += `<p style="color: red;">❌ Error saving test analysis: ${error.message}</p>`;
+            }
+        }
+        
+        // Run the test when the page loads
+        window.addEventListener('load', testAnalysisStorage);
+    </script>
+</body>
+</html> 

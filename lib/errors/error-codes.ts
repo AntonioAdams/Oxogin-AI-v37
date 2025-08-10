@@ -1,0 +1,278 @@
+// Error Code Registry - Centralized error code management
+// Format: [MODULE][FILE][ERROR_TYPE][SEQUENCE]
+// Example: CAP001001 = Capture module, file 001, error type 001, sequence 001
+
+export const ERROR_CODE_REGISTRY = {
+  // CAPTURE MODULE (CAP) - 001-099
+  CAPTURE_INDEX: {
+    FILE_CODE: "001",
+    ERRORS: {
+      INVALID_URL: "CAP001001",
+      MISSING_URL: "CAP001002",
+      CAPTURE_FAILED: "CAP001003",
+      VALIDATION_FAILED: "CAP001004",
+    },
+  },
+
+  CAPTURE_BROWSERLESS: {
+    FILE_CODE: "002",
+    ERRORS: {
+      API_KEY_MISSING: "CAP002001",
+      CONNECTION_FAILED: "CAP002002",
+      TIMEOUT: "CAP002003",
+      INVALID_RESPONSE: "CAP002004",
+      FUNCTION_EXECUTION_ERROR: "CAP002005",
+      SCREENSHOT_FAILED: "CAP002006",
+      DOM_EXTRACTION_FAILED: "CAP002007",
+      RETRY_EXHAUSTED: "CAP002008",
+      RATE_LIMITED: "CAP002009",
+    },
+  },
+
+  // AI MODULE (AI) - 100-199
+  AI_INDEX: {
+    FILE_CODE: "100",
+    ERRORS: {
+      ANALYSIS_FAILED: "AI100001",
+      INVALID_IMAGE: "AI100002",
+      MISSING_DOM_DATA: "AI100003",
+      OPENAI_ERROR: "AI100004",
+    },
+  },
+
+  AI_MATCH: {
+    FILE_CODE: "101",
+    ERRORS: {
+      NO_MATCHES_FOUND: "AI101001",
+      SIMILARITY_CALCULATION_FAILED: "AI101002",
+      PRIORITY_CALCULATION_FAILED: "AI101003",
+      COORDINATE_MISMATCH: "AI101004",
+    },
+  },
+
+  AI_PROMPT: {
+    FILE_CODE: "102",
+    ERRORS: {
+      PROMPT_GENERATION_FAILED: "AI102001",
+      INVALID_DOM_DATA: "AI102002",
+    },
+  },
+
+  // FORM MODULE (FRM) - 200-299
+  FORM_INDEX: {
+    FILE_CODE: "200",
+    ERRORS: {
+      PROCESSING_FAILED: "FRM200001",
+      INVALID_DIMENSIONS: "FRM200002",
+      SCALING_FAILED: "FRM200003",
+    },
+  },
+
+  FORM_EXTRACTOR: {
+    FILE_CODE: "201",
+    ERRORS: {
+      EXTRACTION_FAILED: "FRM201001",
+      INVALID_FORM_DATA: "FRM201002",
+      FIELD_MAPPING_FAILED: "FRM201003",
+    },
+  },
+
+  FORM_DEDUPLICATE: {
+    FILE_CODE: "202",
+    ERRORS: {
+      DEDUPLICATION_FAILED: "FRM202001",
+      OVERLAP_CALCULATION_FAILED: "FRM202002",
+    },
+  },
+
+  FORM_FILTER: {
+    FILE_CODE: "203",
+    ERRORS: {
+      FILTERING_FAILED: "FRM203001",
+      INVALID_CRITERIA: "FRM203002",
+    },
+  },
+
+  FORM_SCALE: {
+    FILE_CODE: "204",
+    ERRORS: {
+      SCALING_CALCULATION_FAILED: "FRM204001",
+      INVALID_COORDINATES: "FRM204002",
+      DIMENSION_MISMATCH: "FRM204003",
+    },
+  },
+
+  // TOOLTIP MODULE (TTP) - 300-399
+  TOOLTIP_INDEX: {
+    FILE_CODE: "300",
+    ERRORS: {
+      COMPUTATION_FAILED: "TTP300001",
+      INVALID_INPUT: "TTP300002",
+      VALIDATION_FAILED: "TTP300003",
+    },
+  },
+
+  TOOLTIP_POSITIONER: {
+    FILE_CODE: "301",
+    ERRORS: {
+      POSITIONING_FAILED: "TTP301001",
+      COLLISION_DETECTION_FAILED: "TTP301002",
+      INVALID_COORDINATES: "TTP301003",
+      CONTAINER_SIZE_INVALID: "TTP301004",
+    },
+  },
+
+  TOOLTIP_METRICS: {
+    FILE_CODE: "302",
+    ERRORS: {
+      METRICS_CALCULATION_FAILED: "TTP302001",
+      INVALID_PREDICTION_DATA: "TTP302002",
+      CONFIDENCE_CALCULATION_FAILED: "TTP302003",
+    },
+  },
+
+  TOOLTIP_RENDER_UTILS: {
+    FILE_CODE: "303",
+    ERRORS: {
+      RENDERING_FAILED: "TTP303001",
+      INVALID_SIDE: "TTP303002",
+      CLASS_GENERATION_FAILED: "TTP303003",
+    },
+  },
+
+  // CORE MODULE (COR) - 400-499
+  CORE_WORKFLOW: {
+    FILE_CODE: "400",
+    ERRORS: {
+      WORKFLOW_CREATION_FAILED: "COR400001",
+      STEP_EXECUTION_FAILED: "COR400002",
+      WORKFLOW_TIMEOUT: "COR400003",
+      BATCH_PROCESSING_FAILED: "COR400004",
+    },
+  },
+
+  CORE_PIPELINE: {
+    FILE_CODE: "401",
+    ERRORS: {
+      PIPELINE_CREATION_FAILED: "COR401001",
+      STEP_VALIDATION_FAILED: "COR401002",
+      PIPELINE_EXECUTION_FAILED: "COR401003",
+    },
+  },
+
+  // UTILS MODULE (UTL) - 500-599
+  UTILS_LOGGER: {
+    FILE_CODE: "500",
+    ERRORS: {
+      LOGGER_INITIALIZATION_FAILED: "UTL500001",
+      LOG_ADAPTER_FAILED: "UTL500002",
+      LOG_ENTRY_CREATION_FAILED: "UTL500003",
+    },
+  },
+
+  UTILS_VALIDATION: {
+    FILE_CODE: "501",
+    ERRORS: {
+      URL_VALIDATION_FAILED: "UTL501001",
+      FILE_VALIDATION_FAILED: "UTL501002",
+      SANITIZATION_FAILED: "UTL501003",
+    },
+  },
+
+  // API MODULE (API) - 600-699
+  API_CAPTURE: {
+    FILE_CODE: "600",
+    ERRORS: {
+      REQUEST_PARSING_FAILED: "API600001",
+      RESPONSE_GENERATION_FAILED: "API600002",
+      MIDDLEWARE_ERROR: "API600003",
+    },
+  },
+
+  API_ANALYZE_CTA: {
+    FILE_CODE: "601",
+    ERRORS: {
+      FORMDATA_PARSING_FAILED: "API601001",
+      IMAGE_PROCESSING_FAILED: "API601002",
+      ANALYSIS_REQUEST_FAILED: "API601003",
+    },
+  },
+
+  API_PREDICT_CLICKS: {
+    FILE_CODE: "602",
+    ERRORS: {
+      PREDICTION_GENERATION_FAILED: "API602001",
+      INVALID_DOM_DATA: "API602002",
+      MOCK_DATA_CREATION_FAILED: "API602003",
+    },
+  },
+
+  // COMPONENTS MODULE (CMP) - 700-799
+  COMPONENTS_TOOLTIP: {
+    FILE_CODE: "700",
+    ERRORS: {
+      COMPONENT_RENDER_FAILED: "CMP700001",
+      PROPS_VALIDATION_FAILED: "CMP700002",
+      ANIMATION_FAILED: "CMP700003",
+    },
+  },
+
+  COMPONENTS_FORM_BOUNDARY: {
+    FILE_CODE: "701",
+    ERRORS: {
+      BOUNDARY_RENDER_FAILED: "CMP701001",
+      COORDINATE_CALCULATION_FAILED: "CMP701002",
+      STYLING_FAILED: "CMP701003",
+    },
+  },
+
+  // APP MODULE (APP) - 800-899
+  APP_PAGE: {
+    FILE_CODE: "800",
+    ERRORS: {
+      STATE_MANAGEMENT_FAILED: "APP800001",
+      IMAGE_LOAD_FAILED: "APP800002",
+      API_CALL_FAILED: "APP800003",
+      COMPONENT_INITIALIZATION_FAILED: "APP800004",
+    },
+  },
+} as const
+
+// Type for error codes
+export type ErrorCode = string
+
+// Helper function to get error info
+export function getErrorInfo(errorCode: ErrorCode) {
+  const [module, fileCode, errorType] = [
+    errorCode.substring(0, 3),
+    errorCode.substring(3, 6),
+    errorCode.substring(6, 9),
+  ]
+
+  return {
+    module,
+    fileCode,
+    errorType,
+    fullCode: errorCode,
+  }
+}
+
+// Error code generator for new files
+export function generateNextErrorCode(module: string): {
+  nextFileCode: string
+  nextErrorCode: string
+} {
+  const modulePrefix = module.toUpperCase().substring(0, 3)
+  const existingFileCodes = Object.values(ERROR_CODE_REGISTRY)
+    .filter((entry) => entry.FILE_CODE)
+    .map((entry) => Number.parseInt(entry.FILE_CODE))
+    .sort((a, b) => a - b)
+
+  const nextFileCode = (Math.max(...existingFileCodes) + 1).toString().padStart(3, "0")
+  const nextErrorCode = `${modulePrefix}${nextFileCode}001`
+
+  return {
+    nextFileCode,
+    nextErrorCode,
+  }
+}
