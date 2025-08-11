@@ -83,7 +83,27 @@ export class ClickPredictionEngine {
       // Step 1: Filter and validate elements
       let validElements
       try {
+        console.log("🔧 PREDICTION ENGINE: Input elements:", elements.length)
+        console.log("🔧 PREDICTION ENGINE: Sample input elements:", elements.slice(0, 3).map(e => ({
+          id: e.id,
+          tagName: e.tagName, 
+          text: e.text?.substring(0, 30),
+          isVisible: e.isVisible,
+          isInteractive: e.isInteractive,
+          coordinates: e.coordinates
+        })))
+        
         validElements = this.filterValidElements(elements)
+        
+        console.log("🔧 PREDICTION ENGINE: Valid elements after filtering:", validElements.length)
+        console.log("🔧 PREDICTION ENGINE: Sample valid elements:", validElements.slice(0, 3).map(e => ({
+          id: e.id,
+          tagName: e.tagName,
+          text: e.text?.substring(0, 30),
+          isVisible: e.isVisible,
+          isInteractive: e.isInteractive
+        })))
+        
         debugLogCategory("DEBUG ENGINE", "Element filtering completed, valid count:", validElements.length)
         debugLogCategory(
           "DEBUG ENGINE", "Valid elements after filtering:",
@@ -119,7 +139,26 @@ export class ClickPredictionEngine {
       // Step 3: Score all elements
       let scoredElements
       try {
+        console.log("🔧 PREDICTION ENGINE: Interactive elements for scoring:", interactiveElements.length)
+        console.log("🔧 PREDICTION ENGINE: Sample interactive elements:", interactiveElements.slice(0, 3).map(e => ({
+          id: e.id,
+          tagName: e.tagName,
+          text: e.text?.substring(0, 30),
+          isVisible: e.isVisible,
+          isInteractive: e.isInteractive
+        })))
+        
         scoredElements = this.elementScorer.scoreElements(interactiveElements, enhancedContext)
+        
+        console.log("🔧 PREDICTION ENGINE: Scored elements after scoring:", scoredElements.length)
+        console.log("🔧 PREDICTION ENGINE: Sample scored elements:", scoredElements.slice(0, 3).map(e => ({
+          id: e.element.id,
+          tagName: e.element.tagName,
+          text: e.element.text?.substring(0, 30),
+          score: e.score
+        })))
+        console.log("🔧 PREDICTION ENGINE: MIN_SCORE threshold:", CONSTANTS.MIN_SCORE)
+        
         debugLogCategory("DEBUG ENGINE", "Element scoring completed, scored count:", scoredElements.length)
         debugLogCategory(
           "DEBUG ENGINE", "Scored elements:",
@@ -188,10 +227,14 @@ export class ClickPredictionEngine {
       debugLogCategory("DEBUG ENGINE", "Step 6.5 - Starting Wasted Click Analysis v5.3")
       let wastedClickAnalysis
       try {
-        // Find primary CTA (highest predicted clicks)
-        const primaryCTA = predictions.reduce((max, current) =>
-          current.predictedClicks > max.predictedClicks ? current : max,
-        )
+        // Find primary CTA (highest predicted clicks) - handle empty array
+        if (predictions.length === 0) {
+          debugLogCategory("DEBUG ENGINE", "No predictions available for wasted click analysis")
+          wastedClickAnalysis = null
+        } else {
+          const primaryCTA = predictions.reduce((max, current) =>
+            current.predictedClicks > max.predictedClicks ? current : max,
+          )
 
         const primaryCTAElement = validElements.find((el) => el.id === primaryCTA.elementId)
 
@@ -211,6 +254,7 @@ export class ClickPredictionEngine {
             wastedClickAnalysis,
             cpcEstimation.estimatedCPC,
           )
+        }
         }
       } catch (error) {
         debugLogCategory("DEBUG ENGINE", "Wasted Click Analysis v5.3 FAILED:", error)

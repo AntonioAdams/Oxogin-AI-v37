@@ -122,6 +122,7 @@ Required JSON format:
   "text": "exact button text here",
   "confidence": 0.8,
   "hasForm": true,
+  "isFormAssociated": true,
   "reasoning": "detailed explanation here",
   "elementType": "button",
   "alternativeTexts": ["alternative1", "alternative2"]
@@ -138,6 +139,7 @@ The response must be valid JSON only. No additional text or explanations outside
 4. ✅ Consider text intent, **VISUAL PROMINENCE**, location, and uniqueness for above-fold elements only
 5: Ignore search bars, icons, or search buttons commonly found in navigation — these are not primary CTAs.
 6: ❌ **IGNORE** cookies, privacy banners, terms of service banners, and legal compliance elements — these are required site elements but not primary CTAs. **LOOK BEYOND** consent, cookie, and privacy banners to find the actual primary CTA on the page.
+6.1: ❌ **IGNORE** cookie acceptance buttons like "Accept all cookies", "Manage cookies", and similar privacy compliance CTAs.
 7: ✅ **PRIORITIZE ACTION-ORIENTED CTAs** over navigation: For example, on Apple's website, "Shop" or "Buy" buttons in the hero section should be prioritized over header navigation items like "Mac", "iPad", "iPhone" which are category navigation, not conversion actions.
 8: Fallback proximity search: If no above-the-fold forms or buttons are detected, select the nearest form or button just above the fold (smallest distanceFromTop) as the primary CTA.
 9: Visibility requirement: Ensure the selected element is visibly rendered in the screenshot; if the candidate is not visible upon visual analysis, it must be excluded and a fallback chosen.
@@ -181,7 +183,35 @@ Focus on finding the ONE action users are most likely to take for conversion, pr
 - ✅ "Buy" (hero section) = Direct purchase action, primary CTA
 - ✅ "Learn more" (hero product section) = Product engagement, secondary CTA
 
-Remember: Navigation items help users browse, but action-oriented CTAs drive conversions.`
+Remember: Navigation items help users browse, but action-oriented CTAs drive conversions.
+
+🎯 **FORM ASSOCIATION DETECTION** - Critical for Funnel Analysis:
+
+When identifying the primary CTA, determine if it's associated with a VISIBLE form on the CURRENT page:
+
+**isFormAssociated: true** ONLY when:
+- The CTA is a form submit button (e.g., "Submit", "Get Started", "Sign Up") 
+- AND there are visible form fields (email, name, phone) on the current page
+- AND the CTA is positioned within or directly adjacent to those visible form fields
+- The CTA's purpose is to submit form data that is visible on this page
+- Examples: "Get the Guide" next to email input, "Apply Now" with application form, "Subscribe" with email field
+
+**isFormAssociated: false** when:
+- The CTA is a navigation link that goes to another page (e.g., "Learn More", "About", "View Products")
+- The CTA is for purchasing/commerce (e.g., "Buy Now", "Shop", "Add to Cart", "Purchase")
+- The CTA leads to another page, even if that other page might have forms
+- No form fields are visible on the current page in the CTA area
+- The CTA is for browsing, downloading, or informational purposes
+- Examples: "Buy iPhone", "Shop Mac", "Learn More", "View Details", "Download"
+
+**CRITICAL RULE**: Do NOT guess about forms on other pages. Only consider visible elements on the current screenshot.
+
+**hasForm: true/false** indicates if ANY form exists on the current page
+**isFormAssociated: true/false** indicates if the PRIMARY CTA submits a form visible on the current page
+
+This distinction is critical:
+- FORM funnel (isFormAssociated=true) = Single-step conversion with visible form submission
+- NON-FORM funnel (isFormAssociated=false) = Multi-step conversion requiring navigation to another page`
 
     // Prepare messages for OpenAI
     const messages: any[] = [

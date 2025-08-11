@@ -1,7 +1,8 @@
 "use client"
 
 import { useState, useCallback, useEffect, useRef } from "react"
-import { Target, FileDown, Eye } from "lucide-react"
+import { Target, FileDown, Eye, TrendingUp } from "lucide-react"
+import Link from "next/link"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { processFormsForDisplay } from "@/lib/form"
 import type { ScaledFormData } from "@/lib/form/schema"
@@ -1576,6 +1577,18 @@ export default function OxoginAI() {
                 Competitor Intel
               </Button>
             )}
+            {/* Funnel Button - Only show when analysis is complete */}
+            {(desktopPrimaryCTAPrediction || mobilePrimaryCTAPrediction) && (
+              <Link href={`/funnel?url=${encodeURIComponent(url)}`} className="w-full">
+                <Button
+                  variant="ghost"
+                  className="w-full justify-start gap-3 text-gray-600 hover:bg-blue-50 hover:text-blue-700 rounded-lg h-12"
+                >
+                  <TrendingUp className="w-5 h-5" />
+                  Funnel
+                </Button>
+              </Link>
+            )}
             {/* PDF Export Button - Only show when analysis is complete */}
             {(desktopPrimaryCTAPrediction || mobilePrimaryCTAPrediction) && (
               <div className="pt-2">
@@ -1737,6 +1750,8 @@ export default function OxoginAI() {
                         onReset={resetAnalysis}
                         clickPredictions={desktopClickPredictions}
                         allDOMElements={desktopCaptureResult.domData}
+                        funnelType="none"
+                        funnelStep={1}
                       />
 
                       {/* Desktop Debug Panel - ONLY IN DEVELOPMENT */}
@@ -1785,6 +1800,8 @@ export default function OxoginAI() {
                         onReset={resetAnalysis}
                         clickPredictions={mobileClickPredictions}
                         allDOMElements={mobileCaptureResult.domData}
+                        funnelType="none"
+                        funnelStep={1}
                       />
 
                       {/* Mobile Debug Panel - ONLY IN DEVELOPMENT */}

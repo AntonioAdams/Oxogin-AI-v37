@@ -17,4 +17,6 @@ export interface CaptureDisplayProps {
   allDOMElements?: any
   openAIResult?: any // Add OpenAI result prop
   croAnalysisResult?: any // Add CRO analysis result prop
+  funnelType?: 'form' | 'non-form' | 'none' // Add funnel type
+  funnelStep?: 1 | 2 // Add funnel step (1 = current page, 2 = step 2 page)
 }

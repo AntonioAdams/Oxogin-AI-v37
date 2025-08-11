@@ -105,6 +105,8 @@ export function CaptureDisplay({
   allDOMElements,
   openAIResult,
   croAnalysisResult,
+  funnelType = 'none',
+  funnelStep = 1,
 }: CaptureDisplayProps) {
   const [showFormBoundaries, setShowFormBoundaries] = useState(true)
   const imageRef = useRef<HTMLImageElement>(null)
@@ -246,7 +248,7 @@ export function CaptureDisplay({
 
       if (validateTooltipInput(tooltipInput)) {
         const tooltipProps = computeTooltipProps(tooltipInput)
-        return <CTATooltip {...tooltipProps} isFormRelated={isFormRelated} />
+        return <CTATooltip {...tooltipProps} isFormRelated={isFormRelated} funnelType={funnelType} funnelStep={funnelStep} />
       }
       return null
     }
@@ -275,7 +277,7 @@ export function CaptureDisplay({
 
     if (validateTooltipInput(tooltipInput)) {
       const tooltipProps = computeTooltipProps(tooltipInput)
-      return <CTATooltip {...tooltipProps} isFormRelated={isFormRelated} />
+      return <CTATooltip {...tooltipProps} isFormRelated={isFormRelated} funnelType={funnelType} funnelStep={funnelStep} />
     }
 
     return null

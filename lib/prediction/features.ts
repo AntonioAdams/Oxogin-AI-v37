@@ -8,42 +8,53 @@ export class FeatureExtractor {
    * Extract all features for a DOM element
    */
   extractFeatures(element: DOMElement, context: PageContext): ElementFeatures {
+    // Add safety checks to prevent NaN values
+    const safeCalculate = (fn: () => number, fallback: number = 0): number => {
+      try {
+        const result = fn()
+        return isNaN(result) || !isFinite(result) ? fallback : result
+      } catch (error) {
+        console.warn("Feature calculation error:", error)
+        return fallback
+      }
+    }
+    
     return {
       // Core interaction features
-      visibilityScore: this.calculateVisibilityScore(element),
-      informationScent: this.calculateInformationScent(element),
-      frictionScore: this.calculateFrictionScore(element),
-      interactivityScore: this.calculateInteractivityScore(element),
-      heatmapAttention: this.calculateHeatmapAttention(element, context),
+      visibilityScore: safeCalculate(() => this.calculateVisibilityScore(element), 0.5),
+      informationScent: safeCalculate(() => this.calculateInformationScent(element), 0.1),
+      frictionScore: safeCalculate(() => this.calculateFrictionScore(element), 0.5),
+      interactivityScore: safeCalculate(() => this.calculateInteractivityScore(element), 0.1),
+      heatmapAttention: safeCalculate(() => this.calculateHeatmapAttention(element, context), 0.1),
 
       // Content and credibility
-      credibilityScore: this.calculateCredibilityScore(element, context),
-      contentDepthScore: this.calculateContentDepthScore(element),
-      intentScore: this.calculateIntentScore(element),
-      visualAffordanceScore: this.calculateVisualAffordanceScore(element),
-      scrollDepthScore: this.calculateScrollDepthScore(element, context),
+      credibilityScore: safeCalculate(() => this.calculateCredibilityScore(element, context), 0.1),
+      contentDepthScore: safeCalculate(() => this.calculateContentDepthScore(element), 0.1),
+      intentScore: safeCalculate(() => this.calculateIntentScore(element), 0.1),
+      visualAffordanceScore: safeCalculate(() => this.calculateVisualAffordanceScore(element), 0.1),
+      scrollDepthScore: safeCalculate(() => this.calculateScrollDepthScore(element, context), 0.1),
 
       // Performance and technical
-      performanceScore: this.calculatePerformanceScore(context),
-      trustBoost: this.calculateTrustBoost(element, context),
-      segmentModifier: this.calculateSegmentModifier(element, context),
-      socialProofBoost: this.calculateSocialProofBoost(element, context),
-      progressIndication: this.calculateProgressIndication(element),
+      performanceScore: safeCalculate(() => this.calculatePerformanceScore(context), 0.1),
+      trustBoost: safeCalculate(() => this.calculateTrustBoost(element, context), 0.0),
+      segmentModifier: safeCalculate(() => this.calculateSegmentModifier(element, context), 0.0),
+      socialProofBoost: safeCalculate(() => this.calculateSocialProofBoost(element, context), 0.0),
+      progressIndication: safeCalculate(() => this.calculateProgressIndication(element), 0.0),
 
       // Enhancement factors
-      dynamicContentBoost: this.calculateDynamicContentBoost(element),
-      urgencyBoost: this.calculateUrgencyBoost(element),
-      autoCompletion: this.calculateAutoCompletion(element),
-      fieldGrouping: this.calculateFieldGrouping(element),
+      dynamicContentBoost: safeCalculate(() => this.calculateDynamicContentBoost(element), 0.0),
+      urgencyBoost: safeCalculate(() => this.calculateUrgencyBoost(element), 0.0),
+      autoCompletion: safeCalculate(() => this.calculateAutoCompletion(element), 0.0),
+      fieldGrouping: safeCalculate(() => this.calculateFieldGrouping(element), 0.0),
 
       // Minor factors
-      emotionalColorBoost: this.calculateEmotionalColorBoost(element),
-      crossDevicePriming: this.calculateCrossDevicePriming(element, context),
+      emotionalColorBoost: safeCalculate(() => this.calculateEmotionalColorBoost(element), 0.0),
+      crossDevicePriming: safeCalculate(() => this.calculateCrossDevicePriming(element, context), 0.0),
 
       // Penalty factors
-      deadClickRisk: this.calculateDeadClickRisk(element),
-      cognitiveLoadPenalty: this.calculateCognitiveLoadPenalty(context),
-      fieldComplexity: this.calculateFieldComplexity(element),
+      deadClickRisk: safeCalculate(() => this.calculateDeadClickRisk(element), 0.0),
+      cognitiveLoadPenalty: safeCalculate(() => this.calculateCognitiveLoadPenalty(context), 0.0),
+      fieldComplexity: safeCalculate(() => this.calculateFieldComplexity(element), 0.0),
     }
   }
 

@@ -300,7 +300,19 @@ class AnalysisStorage {
         const compressedUpdates = await this.compressAnalysisImages(updates)
 
         analyses[index] = { ...analyses[index], ...compressedUpdates, timestamp: new Date() }
-        localStorage.setItem(this.storageKey, JSON.stringify(analyses))
+        
+        try {
+          localStorage.setItem(this.storageKey, JSON.stringify(analyses))
+        } catch (error) {
+          if (error.name === 'QuotaExceededError') {
+            // Clear old analyses to free up space
+            const recentAnalyses = analyses.slice(-5) // Keep only last 5 analyses
+            localStorage.setItem(this.storageKey, JSON.stringify(recentAnalyses))
+            console.warn("Storage quota exceeded, cleared old analyses and retried")
+          } else {
+            throw error
+          }
+        }
 
         if (process.env.NODE_ENV === "development") {
           debugLogCategory("Analysis Storage", "Analysis updated with compression:", id)

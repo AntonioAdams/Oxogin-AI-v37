@@ -6,19 +6,37 @@ const moduleLogger = logger.module("api-analyze-cta")
 
 export async function POST(request: NextRequest) {
   try {
-    const formData = await request.formData()
-    const imageFile = formData.get("image") as File
-    const domDataString = formData.get("domData") as string
+    const contentType = request.headers.get("content-type") || ""
+    
+    let imageFile: File | string
+    let domData: any = {}
 
-    if (!imageFile) {
-      return NextResponse.json({ error: "No image file provided" }, { status: 400 })
+    if (contentType.includes("multipart/form-data")) {
+      // Handle FormData (original behavior)
+      const formData = await request.formData()
+      imageFile = formData.get("image") as File
+      const domDataString = formData.get("domData") as string
+      domData = domDataString ? JSON.parse(domDataString) : {}
+      
+      if (!imageFile) {
+        return NextResponse.json({ error: "No image file provided" }, { status: 400 })
+      }
+    } else {
+      // Handle JSON (for funnel feature)
+      const body = await request.json()
+      imageFile = body.screenshot
+      domData = body.domData || {}
+      
+      if (!imageFile) {
+        return NextResponse.json({ error: "No screenshot provided" }, { status: 400 })
+      }
     }
 
     moduleLogger.info("Starting CTA analysis")
 
     const result = await analyzeCTA({
       image: imageFile,
-      domData: domDataString ? JSON.parse(domDataString) : {}, // Keep for compatibility but not used
+      domData: domData, // Keep for compatibility but not used
     })
 
     moduleLogger.info(`CTA analysis completed in ${result.processingTime}ms`)

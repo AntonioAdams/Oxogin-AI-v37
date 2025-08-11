@@ -7,6 +7,8 @@ import { handleError, createErrorResponse, getHttpStatusCode } from "@/lib/error
 import { creditManager } from "@/lib/credits/manager"
 import { sanitizeUrl } from "@/lib/utils"
 import { validateUrl } from "@/lib/utils/validation"
+import { analyzeCTA } from "@/lib/ai"
+import { ClickPredictionEngine } from "@/lib/prediction/engine"
 
 const apiLogger = logger.module("api-capture")
 
@@ -193,6 +195,175 @@ export async function POST(request: NextRequest) {
       })
     }
 
+    // Add CTA analysis and click predictions for funnel feature
+    let ctaInsight = null
+    let clickPredictions = null
+    let primaryCTAPrediction = null
+    let elements = [] // Declare elements outside for debugging
+
+    try {
+      // Run CTA analysis if we have valid data
+      if (result.screenshot && result.domData) {
+        // Convert base64 screenshot to Blob for CTA analysis
+        const base64Data = result.screenshot.replace(/^data:image\/[^;]+;base64,/, '')
+        const binaryData = Buffer.from(base64Data, 'base64')
+        const imageBlob = new Blob([binaryData], { type: 'image/png' })
+        
+        const ctaResult = await analyzeCTA({
+          image: imageBlob,
+          domData: result.domData,
+        })
+        ctaInsight = ctaResult.insight
+        apiLogger.info("CTA analysis completed for capture", { requestId, ctaText: ctaInsight?.text })
+      }
+    } catch (ctaError) {
+      apiLogger.warn("CTA analysis failed during capture", ctaError as Error, { requestId })
+    }
+
+    try {
+      // Run click predictions if we have valid elements
+      if (result.domData) {
+        const predictionEngine = new ClickPredictionEngine()
+        
+        // Create elements array for prediction
+        elements = [] // Reset the array
+        
+        console.log("🔧 DEBUGGING: Creating elements for prediction:", {
+          linksInDomData: result.domData.links?.length || 0,
+          buttonsInDomData: result.domData.buttons?.length || 0,
+          formFieldsInDomData: result.domData.formFields?.length || 0,
+          sampleLink: result.domData.links?.[0],
+          sampleButton: result.domData.buttons?.[0]
+        })
+        
+        if (result.domData.links) {
+          result.domData.links.forEach((link, index) => {
+            const element = {
+              id: `link-${index}`,
+              tagName: 'a',
+              text: link.text || '',
+              href: link.href,
+              isAboveFold: link.isAboveFold,
+              isVisible: link.isVisible !== false, // Default to true if not specified
+              isInteractive: true, // Links are interactive
+              className: link.className || '',
+              coordinates: link.coordinates || { x: 0, y: 0, width: 0, height: 0 },
+              hasButtonStyling: link.hasButtonStyling || false,
+              distanceFromTop: link.distanceFromTop || 0
+            }
+            console.log(`🔧 DEBUGGING: Adding link element ${index}:`, element)
+            elements.push(element)
+          })
+        }
+
+        if (result.domData.buttons) {
+          result.domData.buttons.forEach((button, index) => {
+            const element = {
+              id: `button-${index}`,
+              tagName: 'button',
+              text: button.text || '',
+              isAboveFold: button.isAboveFold,
+              isVisible: button.isVisible !== false, // Default to true if not specified
+              isInteractive: true, // Buttons are interactive
+              className: button.className || '',
+              coordinates: button.coordinates || { x: 0, y: 0, width: 0, height: 0 },
+              distanceFromTop: button.distanceFromTop || 0
+            }
+            console.log(`🔧 DEBUGGING: Adding button element ${index}:`, element)
+            elements.push(element)
+          })
+        }
+
+        // Also add form fields if present
+        if (result.domData.formFields) {
+          result.domData.formFields.forEach((field, index) => {
+            const element = {
+              id: `field-${index}`,
+              tagName: 'input',
+              text: field.label || field.placeholder || '',
+              type: field.type || 'text',
+              isAboveFold: field.isAboveFold,
+              isVisible: field.isVisible !== false,
+              isInteractive: true, // Form fields are interactive
+              className: field.className || '',
+              coordinates: field.coordinates || { x: 0, y: 0, width: 0, height: 0 },
+              required: field.required || false,
+              label: field.label,
+              placeholder: field.placeholder,
+              distanceFromTop: field.distanceFromTop || 0
+            }
+            console.log(`🔧 DEBUGGING: Adding form field element ${index}:`, element)
+            elements.push(element)
+          })
+        }
+        
+        console.log("🔧 DEBUGGING: Total elements created:", elements.length)
+
+        if (elements.length > 0) {
+          apiLogger.info("Running click predictions", { 
+            requestId, 
+            elementsCount: elements.length,
+            linkCount: result.domData.links?.length || 0,
+            buttonCount: result.domData.buttons?.length || 0,
+            formFieldCount: result.domData.formFields?.length || 0,
+            sampleElements: elements.slice(0, 3).map(e => ({ id: e.id, tagName: e.tagName, text: e.text?.substring(0, 30), isVisible: e.isVisible, isInteractive: e.isInteractive }))
+          })
+          
+          console.log("🔧 DEBUGGING: About to call prediction engine with context:", {
+            url: sanitizedUrl,
+            deviceType: result.isMobile ? 'mobile' : 'desktop',
+            totalImpressions: 1000,
+            trafficSource: 'unknown'
+          })
+
+          const predictions = await predictionEngine.predictClicks(elements, {
+            url: sanitizedUrl,
+            deviceType: result.isMobile ? 'mobile' : 'desktop',
+            userAgent: 'capture-api',
+            viewport: { width: result.isMobile ? 375 : 1920, height: result.isMobile ? 812 : 1080 },
+            timestamp: Date.now(),
+            totalImpressions: 1000, // Default traffic estimate
+            trafficSource: 'unknown' // Default traffic source for capture analysis
+          })
+
+          console.log("🔧 DEBUGGING: Prediction engine result:", {
+            predictionsCount: predictions.predictions?.length || 0,
+            samplePrediction: predictions.predictions?.[0],
+            warnings: predictions.warnings,
+            metadata: predictions.metadata
+          })
+
+          clickPredictions = predictions.predictions
+          
+          // Find primary CTA prediction (highest predicted clicks)
+          if (clickPredictions && clickPredictions.length > 0) {
+            primaryCTAPrediction = clickPredictions.reduce((max, current) =>
+              current.predictedClicks > max.predictedClicks ? current : max
+            )
+          }
+          
+          apiLogger.info("Click predictions completed for capture", { 
+            requestId, 
+            predictionsCount: clickPredictions?.length || 0,
+            primaryCTAText: primaryCTAPrediction?.text || 'None'
+          })
+        } else {
+          apiLogger.warn("No elements available for click prediction", {
+            requestId,
+            linkCount: result.domData.links?.length || 0,
+            buttonCount: result.domData.buttons?.length || 0,
+            formFieldCount: result.domData.formFields?.length || 0,
+            hasCoordinates: {
+              links: result.domData.links?.filter(l => l.coordinates).length || 0,
+              buttons: result.domData.buttons?.filter(b => b.coordinates).length || 0
+            }
+          })
+        }
+      }
+    } catch (predictionError) {
+      apiLogger.warn("Click prediction failed during capture", predictionError as Error, { requestId })
+    }
+
     apiLogger.info(`Successfully captured website: ${sanitizedUrl}`, {
       requestId,
       title: result.domData.title,
@@ -204,14 +375,31 @@ export async function POST(request: NextRequest) {
       aboveFoldButtons: result.domData.foldLine.aboveFoldButtons,
       isMobile: result.isMobile || false,
       creditsRemaining: updatedBalance.remainingCredits,
+      hasCTAInsight: !!ctaInsight,
+      hasClickPredictions: !!clickPredictions,
+      hasPrimaryCTA: !!primaryCTAPrediction,
     })
 
     return NextResponse.json({
       ...result,
+      ctaInsight,
+      clickPredictions,
+      primaryCTAPrediction,
       requestId,
       timestamp: new Date().toISOString(),
       creditsRemaining: updatedBalance.remainingCredits,
       creditsUsed: updatedBalance.usedCredits,
+      // DEBUG: Add debugging info to response
+      debug: {
+        elementsProcessed: elements?.length || 0,
+        linksInDom: result.domData.links?.length || 0,
+        buttonsInDom: result.domData.buttons?.length || 0,
+        formFieldsInDom: result.domData.formFields?.length || 0,
+        predictionEngineResult: clickPredictions ? {
+          count: clickPredictions.length,
+          sample: clickPredictions[0]
+        } : null
+      }
     })
   } catch (error) {
     // Handle all errors through the centralized error handler
