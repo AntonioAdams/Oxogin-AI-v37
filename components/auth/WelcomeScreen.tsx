@@ -17,6 +17,7 @@ import {
 import { AuthModal } from "./AuthModal"
 import { CaptureDisplay } from "@/app/page/components/CaptureDisplay"
 import { CompetitorAnalysis } from "@/components/competitor/CompetitorAnalysis"
+import { FunnelAnalysis } from "@/components/funnel/FunnelAnalysis"
 
 import { CreditDisplay } from "@/components/credits/CreditDisplay"
 import { PDFExportButton } from "@/components/ui/pdf-export-button"
@@ -58,8 +59,19 @@ export function WelcomeScreen({ onSkip }: WelcomeScreenProps) {
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [showCompetitorIntel, setShowCompetitorIntel] = useState(false)
   const [isCompetitorAnalyzing, setIsCompetitorAnalyzing] = useState(false)
+  const [showFunnelAnalysis, setShowFunnelAnalysis] = useState(false)
+  const [isFunnelAnalyzing, setIsFunnelAnalyzing] = useState(false)
   const [showMobileMenu, setShowMobileMenu] = useState(false)
   const [competitorData, setCompetitorData] = useState<{
+    url: string
+    domain: string
+    captureResult?: any
+    analysisResult?: any
+    clickPredictions?: any[]
+    primaryCTAPrediction?: any
+    croAnalysisResult?: any
+  } | null>(null)
+  const [funnelData, setFunnelData] = useState<{
     url: string
     domain: string
     captureResult?: any
@@ -391,6 +403,11 @@ export function WelcomeScreen({ onSkip }: WelcomeScreenProps) {
     setCompetitorData(null)
     setShowCompetitorIntel(false)
     setIsCompetitorAnalyzing(false)
+    
+    // Clear funnel data only on new analysis
+    setFunnelData(null)
+    setShowFunnelAnalysis(false)
+    setIsFunnelAnalyzing(false)
 
     setActiveTab("desktop")
   }, [])
@@ -824,6 +841,12 @@ export function WelcomeScreen({ onSkip }: WelcomeScreenProps) {
                 // Only log prediction found in development
                 if (process.env.NODE_ENV === "development") {
                   console.log("✅ Prediction found, showing tooltip:", prediction.elementId)
+                  console.log("🐛 WelcomeScreen Debug - Found prediction:", {
+                    text: prediction.text,
+                    elementId: prediction.elementId,
+                    isFormRelated: prediction.isFormRelated,
+                    fullObject: prediction
+                  })
                 }
 
                 if (isMobile) {
@@ -1270,6 +1293,194 @@ export function WelcomeScreen({ onSkip }: WelcomeScreenProps) {
     // Don't trigger any automatic competitor research - let user input URL manually
   }, [url])
 
+  // Show funnel analysis screen immediately
+  const showFunnelAnalysisScreen = useCallback(() => {
+    if (!url.trim()) return
+    
+    console.log("⚡ Opening Funnel Analysis screen")
+    setShowFunnelAnalysis(true)
+    // Don't trigger any automatic funnel analysis - let user input URL manually
+  }, [url])
+
+  // Trigger manual funnel analysis with REAL API calls
+  const triggerManualFunnelAnalysis = useCallback(async (funnelUrl: string) => {
+    if (!url.trim() || !funnelUrl.trim()) return
+
+    try {
+      setIsFunnelAnalyzing(true)
+      setShowFunnelAnalysis(true)
+      
+      console.log("⚡ Starting manual funnel analysis for:", funnelUrl)
+
+      // Check if analyzing the same URL as original - if so, reuse data for consistency
+      const normalizeUrl = (inputUrl: string) => {
+        try {
+          const urlObj = new URL(inputUrl.startsWith('http') ? inputUrl : `https://${inputUrl}`)
+          return urlObj.href.replace(/\/$/, '') // Remove trailing slash
+        } catch {
+          return inputUrl.trim().replace(/\/$/, '')
+        }
+      }
+
+      const isSameUrl = normalizeUrl(funnelUrl) === normalizeUrl(url)
+      
+      if (isSameUrl && desktopCaptureResult && desktopClickPredictions) {
+        console.log("🔄 Same URL detected, reusing original analysis data for consistency")
+        
+        setLoadingStage("Reusing original analysis...")
+        setLoadingProgress(50)
+        
+        // Create consistent funnel data from original analysis
+        const consistentFunnelData = {
+          url: funnelUrl,
+          domain: new URL(funnelUrl.startsWith('http') ? funnelUrl : `https://${funnelUrl}`).hostname,
+          captureResult: desktopCaptureResult,
+          clickPredictions: desktopClickPredictions,
+          primaryCTAPrediction: desktopClickPredictions[0] || null,
+          croAnalysisResult: croAnalysisResult || null,
+          analysis: {
+            funnelName: new URL(funnelUrl.startsWith('http') ? funnelUrl : `https://${funnelUrl}`).hostname.replace('www.', '').split('.')[0],
+            funnelUrl,
+            overallScore: desktopClickPredictions[0] ? Math.min(10, (desktopClickPredictions[0].ctr || 0.05) * 100) : 7.5,
+            ctaCount: desktopClickPredictions.length || 0,
+            trustSignalCount: 8
+          },
+          metadata: {
+            originalUrl: funnelUrl,
+            analysisTimestamp: new Date().toISOString(),
+            hasFullAnalysis: true,
+            reuseOriginal: true // Flag to indicate this is reused data
+          }
+        }
+
+        setFunnelData(consistentFunnelData)
+        setLoadingProgress(100)
+        setLoadingStage("Analysis complete!")
+        console.log("🎉 Consistent funnel analysis completed (reused original data)")
+        return
+      }
+
+      // Step 1: Capture the funnel page
+      setLoadingStage("Capturing funnel page...")
+      setLoadingProgress(15)
+      
+      const captureResponse = await fetch('/api/capture', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: funnelUrl })
+      })
+      
+      if (!captureResponse.ok) {
+        throw new Error('Failed to capture funnel page')
+      }
+      
+      const captureResult = await captureResponse.json()
+      console.log("⚡ Funnel page captured successfully")
+
+      // Set initial funnel data after capture
+      setFunnelData({
+        url: funnelUrl,
+        domain: new URL(funnelUrl.startsWith('http') ? funnelUrl : `https://${funnelUrl}`).hostname,
+        captureResult
+      })
+
+      // Step 2: Predict clicks
+      setLoadingStage("Analyzing funnel CTAs...")
+      setLoadingProgress(40)
+      
+      const clicksResponse = await fetch('/api/predict-clicks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          domData: captureResult.domData,
+          screenshot: captureResult.screenshot
+        })
+      })
+      
+      if (!clicksResponse.ok) {
+        throw new Error('Failed to predict clicks')
+      }
+      
+      const clickPredictions = await clicksResponse.json()
+      const primaryCTAPrediction = clickPredictions.predictions?.[0] || null
+      console.log("⚡ Funnel click predictions generated")
+
+      // Update funnel data with predictions
+      setFunnelData(prevData => ({
+        ...prevData!,
+        clickPredictions: clickPredictions.predictions || [],
+        primaryCTAPrediction,
+        metadata: {
+          originalUrl: funnelUrl,
+          analysisTimestamp: new Date().toISOString()
+        }
+      }))
+
+      // Step 3: Run CRO analysis
+      setLoadingStage("Running CRO analysis...")
+      setLoadingProgress(70)
+      
+      const croResponse = await fetch('/api/analyze-cro', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: funnelUrl,
+          domData: captureResult.domData,
+          predictions: clickPredictions.predictions || [],
+          primaryCTAPrediction,
+          matchedElement: primaryCTAPrediction ? {
+            text: primaryCTAPrediction.text || primaryCTAPrediction.element,
+            isFormRelated: primaryCTAPrediction.isFormRelated || false,
+            coordinates: primaryCTAPrediction.coordinates
+          } : null,
+          allDOMElements: [
+            ...(captureResult.domData.buttons || []),
+            ...(captureResult.domData.links || []),
+            ...(captureResult.domData.forms || [])
+          ],
+          analysisMetadata: {
+            originalUrl: funnelUrl,
+            analysisTimestamp: new Date().toISOString()
+          }
+        })
+      })
+
+      const croAnalysisResult = croResponse.ok ? await croResponse.json() : null
+      console.log("⚡ Funnel CRO analysis completed")
+
+      setLoadingStage("Finalizing analysis...")
+      setLoadingProgress(95)
+
+      // Final update to funnel data with CRO analysis
+      setFunnelData(prevData => ({
+        ...prevData!,
+        croAnalysisResult: croAnalysisResult || null,
+        analysis: {
+          funnelName: new URL(funnelUrl.startsWith('http') ? funnelUrl : `https://${funnelUrl}`).hostname.replace('www.', '').split('.')[0],
+          funnelUrl,
+          overallScore: prevData!.primaryCTAPrediction ? Math.min(10, (prevData!.primaryCTAPrediction.ctr || 0.05) * 100) : 7.5,
+          ctaCount: prevData!.clickPredictions?.length || 0,
+          trustSignalCount: 8 // Default value
+        },
+        metadata: {
+          ...prevData!.metadata,
+          hasFullAnalysis: true
+        }
+      }))
+      setLoadingProgress(100)
+      setLoadingStage("Funnel analysis complete!")
+
+      console.log("🎉 Manual funnel analysis completed successfully")
+      
+    } catch (error) {
+      console.error("❌ Manual funnel analysis failed:", error)
+      setLoadingProgress(0)
+      setLoadingStage("")
+    } finally {
+      setIsFunnelAnalyzing(false)
+    }
+  }, [url])
+
   // Trigger competitor analysis workflow (legacy function, keeping for backward compatibility)
   const triggerCompetitorAnalysis = useCallback(async () => {
     if (!url.trim()) return
@@ -1474,6 +1685,154 @@ export function WelcomeScreen({ onSkip }: WelcomeScreenProps) {
     }
   }, [url, getCurrentUserId, competitorData])
 
+  // If showing funnel analysis, render the funnel analysis interface
+  if (showFunnelAnalysis) {
+    return (
+      <div className="min-h-screen bg-white">
+        {/* Mobile Header - Only visible on mobile */}
+        <div className="lg:hidden bg-white border-b border-gray-200 p-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+                <Target className="w-4 h-4 text-white" />
+              </div>
+              <span className="text-xl font-semibold text-gray-900">Oxogin AI</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-md font-medium">
+                Funnel Analysis
+              </div>
+              <Button variant="outline" size="sm" onClick={() => setShowFunnelAnalysis(false)} className="text-xs bg-transparent">
+                ← Back
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex">
+          {/* Left Sidebar - Hidden on mobile, visible on desktop */}
+          <div className="hidden lg:flex w-80 bg-white border-r border-gray-200 p-8 flex-col shadow-sm">
+            {/* Logo */}
+            <div className="flex items-center gap-4 mb-12">
+              <div className="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center">
+                <Target className="w-5 h-5 text-white" />
+              </div>
+              <span className="text-2xl font-semibold text-gray-900">Oxogin AI</span>
+            </div>
+
+            {/* Navigation */}
+            <div className="space-y-2 mb-8">
+              <Button
+                variant="ghost"
+                className="w-full justify-start gap-3 text-gray-600 hover:bg-gray-50 hover:text-gray-900 rounded-lg h-12"
+                onClick={() => setShowFunnelAnalysis(false)}
+              >
+                <Globe className="w-5 h-5" />
+                Back to Analysis
+              </Button>
+              {/* PDF Export Button - Only show when analysis is complete */}
+              {(desktopPrimaryCTAPrediction || mobilePrimaryCTAPrediction) && (
+                <div className="pt-2">
+                  <PDFExportButton 
+                    analysisElementId="analysis-content"
+                    filename={`oxogin-funnel-analysis-${url || 'website'}-${new Date().toISOString().split('T')[0]}.pdf`}
+                    variant="sidebar"
+                    className=""
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Current Analysis */}
+            <div className="space-y-3 mb-6">
+              <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                <div className="text-sm text-gray-700 mb-2 font-medium">Funnel Analysis</div>
+                <div className="text-xs text-gray-600 break-all">{url}</div>
+              </div>
+            </div>
+
+            {/* Credit Display */}
+            <div className="mb-6">
+              <CreditDisplay 
+                onCreditsUpdate={setCreditBalance} 
+                refreshTrigger={creditRefreshTrigger} 
+                balance={creditBalance}
+              />
+            </div>
+
+            {/* Bottom Section */}
+            <div className="mt-auto">
+              <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+                    <Target className="w-5 h-5 text-white" />
+                  </div>
+                  <div className="text-sm text-gray-900 font-medium">Guest User</div>
+                </div>
+                <p className="text-xs text-gray-600 mb-3">
+                  Sign in to save your analysis history and access premium features
+                </p>
+                <Button
+                  className="w-full bg-gray-400 text-white rounded-lg h-10 cursor-not-allowed"
+                  disabled={true}
+                >
+                  Sign in
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Main Content - Funnel Analysis Results */}
+          <div className="flex-1 p-2 sm:p-4 lg:p-6 overflow-auto">
+            {/* Mobile Current Analysis Info */}
+            <div className="lg:hidden mb-4">
+              <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
+                <div className="text-sm text-gray-700 mb-1 font-medium">Funnel Analysis</div>
+                <div className="text-xs text-gray-600 break-all">{url}</div>
+              </div>
+            </div>
+
+            {/* Funnel Analysis Content */}
+            {isFunnelAnalyzing ? (
+              <EnhancedLoadingScreen
+                loadingProgress={loadingProgress}
+                loadingStage={loadingStage}
+                completedSteps={{
+                  desktopCapture: loadingProgress > 25,
+                  desktopAnalysis: loadingProgress > 60,
+                  desktopOpenAI: loadingProgress > 80,
+                  mobileCapture: loadingProgress > 45,
+                  mobileAnalysis: loadingProgress > 65,
+                  mobileOpenAI: loadingProgress > 85,
+                  finalizing: loadingProgress > 95,
+                }}
+                url={funnelData?.url || "Benchmark funnel"}
+                desktopCaptureResult={funnelData?.captureResult}
+                mobileCaptureResult={null}
+                desktopClickPredictions={funnelData?.clickPredictions || []}
+                mobileClickPredictions={[]}
+              />
+            ) : (
+              <FunnelAnalysis 
+                originalData={{
+                  url,
+                  captureResult: desktopCaptureResult,
+                  clickPredictions: desktopClickPredictions,
+                  primaryCTAPrediction: desktopPrimaryCTAPrediction, // Use the matched primary CTA
+                  croAnalysisResult: desktopCroAnalysisResult
+                }}
+                funnelData={funnelData}
+                onFunnelUrlSubmit={triggerManualFunnelAnalysis}
+              />
+            )}
+          </div>
+        </div>
+
+        <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
+      </div>
+    )
+  }
+
   // If showing competitor intel, render the competitor intel interface
   if (showCompetitorIntel) {
     return (
@@ -1673,6 +2032,22 @@ export function WelcomeScreen({ onSkip }: WelcomeScreenProps) {
                 <Globe className="w-5 h-5" />
                 New Analysis
               </Button>
+              {/* Funnel Analysis Button - Only show when analysis is complete */}
+              {(desktopPrimaryCTAPrediction || mobilePrimaryCTAPrediction) && (
+                <Button
+                  variant="ghost"
+                  className="w-full justify-start gap-3 text-gray-600 hover:bg-blue-50 hover:text-blue-700 rounded-lg h-12"
+                  onClick={showFunnelAnalysisScreen}
+                >
+                  <Zap className="w-5 h-5" />
+                  <span className="flex-1 text-left">Funnel Analysis</span>
+                  {funnelData && funnelData.clickPredictions && funnelData.clickPredictions.length > 0 && (
+                    <Badge className="bg-blue-100 text-blue-700 text-xs">
+                      Ready →
+                    </Badge>
+                  )}
+                </Button>
+              )}
               {/* Competitor Intel Button - Only show when analysis is complete */}
               {(desktopPrimaryCTAPrediction || mobilePrimaryCTAPrediction) && (
                 <Button
@@ -1914,6 +2289,18 @@ export function WelcomeScreen({ onSkip }: WelcomeScreenProps) {
                   <Globe className="w-4 h-4" />
                   New Analysis
                 </DropdownMenuItem>
+                {/* Funnel Analysis - Only show when analysis is complete */}
+                {(desktopPrimaryCTAPrediction || mobilePrimaryCTAPrediction) && (
+                  <DropdownMenuItem onClick={showFunnelAnalysisScreen} className="gap-2">
+                    <Zap className="w-4 h-4" />
+                    <span className="flex-1">Funnel Analysis</span>
+                    {funnelData && funnelData.clickPredictions && funnelData.clickPredictions.length > 0 && (
+                      <Badge className="bg-blue-100 text-blue-700 text-xs ml-2">
+                        Ready →
+                      </Badge>
+                    )}
+                  </DropdownMenuItem>
+                )}
                 {/* Competitor Intel - Only show when analysis is complete */}
                 {(desktopPrimaryCTAPrediction || mobilePrimaryCTAPrediction) && (
                   <DropdownMenuItem onClick={showCompetitorIntelligence} className="gap-2">
@@ -1981,6 +2368,22 @@ export function WelcomeScreen({ onSkip }: WelcomeScreenProps) {
               <Globe className="w-5 h-5" />
               New Analysis
             </Button>
+            {/* Funnel Analysis Button - Only show when analysis is complete */}
+            {(desktopPrimaryCTAPrediction || mobilePrimaryCTAPrediction) && (
+              <Button
+                variant="ghost"
+                className="w-full justify-start gap-3 text-gray-600 hover:bg-blue-50 hover:text-blue-700 rounded-lg h-12"
+                onClick={showFunnelAnalysisScreen}
+              >
+                <Zap className="w-5 h-5" />
+                <span className="flex-1 text-left">Funnel Analysis</span>
+                {funnelData && funnelData.clickPredictions && funnelData.clickPredictions.length > 0 && (
+                  <Badge className="bg-blue-100 text-blue-700 text-xs">
+                    Ready →
+                  </Badge>
+                )}
+              </Button>
+            )}
             {/* Competitor Intel Button - Only show when analysis is complete */}
             {(desktopPrimaryCTAPrediction || mobilePrimaryCTAPrediction) && (
               <Button

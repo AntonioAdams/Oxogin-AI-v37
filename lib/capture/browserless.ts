@@ -155,6 +155,27 @@ export default async function ({ page, context }) {
                 return null;
               }
               
+              // Extract additional navigation clues for JavaScript-driven buttons
+              let jsNavigationClues = null
+              try {
+                const onclick = button.getAttribute('onclick')
+                const dataHref = button.getAttribute('data-href') || button.getAttribute('data-url')
+                const dataAction = button.getAttribute('data-action')
+                const ariaHaspopup = button.getAttribute('aria-haspopup')
+                
+                // Check for common JavaScript navigation patterns
+                if (onclick || dataHref || dataAction) {
+                  jsNavigationClues = {
+                    onclick: onclick,
+                    dataHref: dataHref,
+                    dataAction: dataAction,
+                    hasPopup: ariaHaspopup === 'true'
+                  }
+                }
+              } catch (jsError) {
+                console.log('Error extracting JS navigation clues:', jsError)
+              }
+
               const result = {
                 text: text,
                 type: button.tagName.toLowerCase() === 'button' ? (button.type || 'button') : 'link',
@@ -163,6 +184,7 @@ export default async function ({ page, context }) {
                 isVisible: rect.width > 0 && rect.height > 0 && window.getComputedStyle(button).visibility !== 'hidden',
                 isAboveFold: isAboveFold,
                 formAction: button.form ? (button.form.action || 'current page') : null,
+                jsNavigation: jsNavigationClues, // New field for JavaScript navigation clues
                 distanceFromTop: elementTop,
                 coordinates: {
                   x: Math.round(rect.left),
@@ -240,6 +262,99 @@ export default async function ({ page, context }) {
           console.log('Processed links:', links.length);
         } catch (linkError) {
           console.log('Error extracting links:', linkError);
+        }
+        
+        // DEDUPLICATION: Remove duplicate buttons and links with similar text and coordinates (90% overlap)
+        try {
+          console.log('Starting deduplication process...');
+          console.log('Before deduplication - Buttons:', buttons.length, 'Links:', links.length);
+          
+          const allClickableElements = [
+            ...buttons.map(btn => ({ ...btn, sourceType: 'button' })),
+            ...links.map(link => ({ ...link, sourceType: 'link' }))
+          ];
+          
+          const deduplicated = [];
+          const processed = new Set();
+          
+          for (let i = 0; i < allClickableElements.length; i++) {
+            if (processed.has(i)) continue;
+            
+            const current = allClickableElements[i];
+            let shouldKeep = current;
+            
+            // Look for duplicates
+            for (let j = i + 1; j < allClickableElements.length; j++) {
+              if (processed.has(j)) continue;
+              
+              const candidate = allClickableElements[j];
+              
+              // Check text similarity (exact match or very similar)
+              const textSimilarity = current.text === candidate.text || 
+                                   (current.text.length > 0 && candidate.text.length > 0 && 
+                                    (current.text.includes(candidate.text) || candidate.text.includes(current.text)));
+              
+              if (textSimilarity) {
+                // Check coordinate overlap (90% threshold)
+                const currentCoords = current.coordinates;
+                const candidateCoords = candidate.coordinates;
+                
+                const overlapX = Math.max(0, Math.min(currentCoords.x + currentCoords.width, candidateCoords.x + candidateCoords.width) - 
+                                       Math.max(currentCoords.x, candidateCoords.x));
+                const overlapY = Math.max(0, Math.min(currentCoords.y + currentCoords.height, candidateCoords.y + candidateCoords.height) - 
+                                       Math.max(currentCoords.y, candidateCoords.y));
+                const overlapArea = overlapX * overlapY;
+                
+                const currentArea = currentCoords.width * currentCoords.height;
+                const candidateArea = candidateCoords.width * candidateCoords.height;
+                const minArea = Math.min(currentArea, candidateArea);
+                
+                const overlapPercentage = minArea > 0 ? overlapArea / minArea : 0;
+                
+                if (overlapPercentage >= 0.9) {
+                  console.log(\`Found duplicate: "\${current.text}" (\${current.sourceType}) vs "\${candidate.text}" (\${candidate.sourceType}) - \${(overlapPercentage * 100).toFixed(1)}% overlap\`);
+                  
+                  // Priority logic: prefer links with href over buttons, prefer elements with more attributes
+                  if (candidate.sourceType === 'link' && candidate.href && current.sourceType === 'button') {
+                    shouldKeep = candidate;
+                  } else if (current.sourceType === 'link' && current.href && candidate.sourceType === 'button') {
+                    // Keep current (already preferred)
+                  } else {
+                    // Keep the one with more/better attributes
+                    const currentScore = (current.id ? 1 : 0) + (current.className ? 1 : 0) + (current.href ? 2 : 0);
+                    const candidateScore = (candidate.id ? 1 : 0) + (candidate.className ? 1 : 0) + (candidate.href ? 2 : 0);
+                    
+                    if (candidateScore > currentScore) {
+                      shouldKeep = candidate;
+                    }
+                  }
+                  
+                  processed.add(j); // Mark candidate as processed
+                }
+              }
+            }
+            
+            deduplicated.push(shouldKeep);
+            processed.add(i);
+          }
+          
+          // Separate back into buttons and links
+          buttons = deduplicated.filter(el => el.sourceType === 'button').map(el => {
+            const { sourceType, ...rest } = el;
+            return rest;
+          });
+          
+          links = deduplicated.filter(el => el.sourceType === 'link').map(el => {
+            const { sourceType, ...rest } = el;
+            return rest;
+          });
+          
+          console.log('After deduplication - Buttons:', buttons.length, 'Links:', links.length);
+          console.log('Removed', allClickableElements.length - deduplicated.length, 'duplicate elements');
+          
+        } catch (dedupError) {
+          console.log('Error during deduplication:', dedupError);
+          // Continue with original arrays if deduplication fails
         }
         
         // Enhanced form extraction (EXISTING - keep existing logic but improve)

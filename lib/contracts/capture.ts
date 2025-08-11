@@ -22,6 +22,12 @@ export interface ButtonData {
   isVisible: boolean
   isAboveFold: boolean
   formAction: string | null
+  jsNavigation?: {
+    onclick?: string | null
+    dataHref?: string | null
+    dataAction?: string | null
+    hasPopup?: boolean
+  } | null
   distanceFromTop: number
   coordinates: ElementCoordinates
 }

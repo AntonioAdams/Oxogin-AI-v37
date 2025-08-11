@@ -48,44 +48,84 @@ function deduplicateFormFields(formFields: any[]): any[] {
 function convertDOMData(domData: any): DOMElement[] {
   const elements: DOMElement[] = []
 
-  // Convert buttons
+  // Convert buttons and links with deduplication
+  // First, collect all clickable elements with their sources
+  const clickableElements: any[] = []
+  
+  // Add buttons
   domData.buttons?.forEach((button: any, index: number) => {
     if (button.isVisible && button.text?.trim()) {
-      elements.push({
-        id: `button-${button.coordinates.x}-${button.coordinates.y}`,
-        tagName: "button",
-        text: button.text,
-        className: button.className || "",
-        coordinates: button.coordinates,
-        isVisible: button.isVisible,
-        isAboveFold: button.isAboveFold,
-        isInteractive: true,
-        hasButtonStyling: true,
-        type: button.type,
-        distanceFromTop: button.distanceFromTop,
-        formAction: button.formAction,
+      clickableElements.push({
+        source: 'button',
+        data: button,
+        element: {
+          id: `button-${button.coordinates.x}-${button.coordinates.y}`,
+          tagName: "button",
+          text: button.text,
+          className: button.className || "",
+          coordinates: button.coordinates,
+          isVisible: button.isVisible,
+          isAboveFold: button.isAboveFold,
+          isInteractive: true,
+          hasButtonStyling: true,
+          type: button.type,
+          distanceFromTop: button.distanceFromTop,
+          formAction: button.formAction,
+          href: null, // Buttons don't have href
+        }
       })
     }
   })
 
-  // Convert links
+  // Add links
   domData.links?.forEach((link: any, index: number) => {
     if (link.isVisible && link.text?.trim()) {
-      elements.push({
-        id: `link-${link.coordinates.x}-${link.coordinates.y}`,
-        tagName: "a",
-        text: link.text,
-        className: link.className || "",
-        coordinates: link.coordinates,
-        isVisible: link.isVisible,
-        isAboveFold: link.isAboveFold,
-        isInteractive: true,
-        hasButtonStyling: link.hasButtonStyling || false,
-        distanceFromTop: link.distanceFromTop,
-        href: link.href,
+      clickableElements.push({
+        source: 'link',
+        data: link,
+        element: {
+          id: `link-${link.coordinates.x}-${link.coordinates.y}`,
+          tagName: "a",
+          text: link.text,
+          className: link.className || "",
+          coordinates: link.coordinates,
+          isVisible: link.isVisible,
+          isAboveFold: link.isAboveFold,
+          isInteractive: true,
+          hasButtonStyling: link.hasButtonStyling || false,
+          distanceFromTop: link.distanceFromTop,
+          href: link.href,
+        }
       })
     }
   })
+
+  // Deduplicate: if button and link have same text and similar coordinates, prefer link (with href)
+  const deduplicated: DOMElement[] = []
+  const seenElements = new Map<string, any>()
+
+  for (const item of clickableElements) {
+    const { element } = item
+    const roundedX = Math.round(element.coordinates.x / 20) * 20 // Round to nearest 20px
+    const roundedY = Math.round(element.coordinates.y / 20) * 20
+    const key = `${element.text.toLowerCase().trim()}-${roundedX}-${roundedY}`
+    
+    if (!seenElements.has(key)) {
+      seenElements.set(key, item)
+    } else {
+      // If we already have an element with same text/coordinates, prefer the one with href
+      const existing = seenElements.get(key)
+      if (!existing.element.href && element.href) {
+        // Replace button with link version that has href
+        seenElements.set(key, item)
+      }
+    }
+  }
+
+  // Add deduplicated elements
+  for (const item of seenElements.values()) {
+    elements.push(item.element)
+  }
 
   // Convert form containers
   domData.forms?.forEach((form: any, index: number) => {
@@ -240,27 +280,36 @@ export async function POST(request: NextRequest) {
     // Generate predictions using the sophisticated model
     const result = await clickPredictionEngine.predictClicks(elements, context)
 
-    // ENHANCED: Convert to expected format while preserving human-readable text
-    const predictions = result.predictions.map((prediction) => ({
-      elementId: prediction.elementId,
-      ctr: prediction.ctr / 100, // Convert percentage to decimal
-      estimatedClicks: prediction.estimatedClicks,
-      clickShare: prediction.clickShare / 100, // Convert percentage to decimal
-      wastedClicks: prediction.wastedClicks,
-      wastedSpend: prediction.wastedSpend,
-      avgCPC: prediction.avgCPC,
-      confidence: prediction.confidence, // Keep as string
-      riskFactors: prediction.riskFactors,
-      formCompletionRate: prediction.formCompletionRate,
-      leadCount: prediction.leadCount,
-      bottleneckField: prediction.bottleneckField,
-      // ENHANCED: Preserve human-readable text and element information
-      text: prediction.text,
-      elementType: prediction.elementType,
-      tagName: prediction.tagName,
-      coordinates: prediction.coordinates,
-      wasteBreakdown: prediction.wasteBreakdown,
-    }))
+    // ENHANCED: Convert to expected format while preserving human-readable text and href
+    const predictions = result.predictions.map((prediction) => {
+      // Find the original element to get href and other missing properties
+      const originalElement = elements.find((el) => el.id === prediction.elementId)
+      
+      return {
+        elementId: prediction.elementId,
+        ctr: prediction.ctr / 100, // Convert percentage to decimal
+        estimatedClicks: prediction.estimatedClicks,
+        clickShare: prediction.clickShare / 100, // Convert percentage to decimal
+        wastedClicks: prediction.wastedClicks,
+        wastedSpend: prediction.wastedSpend,
+        avgCPC: prediction.avgCPC,
+        confidence: prediction.confidence, // Keep as string
+        riskFactors: prediction.riskFactors,
+        formCompletionRate: prediction.formCompletionRate,
+        leadCount: prediction.leadCount,
+        bottleneckField: prediction.bottleneckField,
+        // ENHANCED: Preserve human-readable text and element information
+        text: prediction.text,
+        elementType: prediction.elementType,
+        tagName: prediction.tagName,
+        coordinates: prediction.coordinates,
+        wasteBreakdown: prediction.wasteBreakdown,
+        isFormRelated: prediction.isFormRelated,
+        // CRITICAL: Include href from original element
+        href: originalElement?.href || null,
+        url: originalElement?.href || null, // Also map to url field for compatibility
+      }
+    })
 
     // Only log prediction results in development
     if (process.env.NODE_ENV === "development") {

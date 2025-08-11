@@ -96,7 +96,6 @@ export class WastedClickModelV53 {
       "subscribe",
       "join",
       "create account",
-      "get started",
       "submit",
       "send",
       "contact us",
@@ -123,6 +122,12 @@ export class WastedClickModelV53 {
       "view",
       "browse",
       "explore",
+      "get started",
+      "start trial",
+      "free trial",
+      "try free",
+      "start now",
+      "try now",
     ]
 
     const isFormCTA =

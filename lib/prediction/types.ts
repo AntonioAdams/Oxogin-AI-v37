@@ -136,6 +136,7 @@ export interface ClickPredictionResult {
   formCompletionRate?: number
   leadCount?: number
   bottleneckField?: string
+  isFormRelated?: boolean
 }
 
 export interface FormBottleneckAnalysis {

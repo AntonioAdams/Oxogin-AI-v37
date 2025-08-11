@@ -129,6 +129,16 @@ export function CROAssistant({
           deviceType,
           dynamicBaseline: croMetrics.currentConversionRate / 100, // Convert back to decimal
           isFormRelated: croMetrics.isFormRelated,
+          // Add missing required parameters to match app/page.tsx
+          primaryCTAPrediction: primaryCTAId ? clickPredictions.find(p => p.elementId === primaryCTAId) : clickPredictions[0],
+          matchedElement: primaryCTAId ? clickPredictions.find(p => p.elementId === primaryCTAId) : clickPredictions[0],
+          allDOMElements: captureResult.domData,
+          analysisMetadata: {
+            imageSize: captureResult.imageSize || { width: 800, height: 600 },
+            timestamp: new Date().toISOString(),
+            url: captureResult.domData?.url || "unknown",
+            enhancedLabelsAvailable: clickPredictions?.some(p => p.text && p.text !== p.elementId) || false,
+          },
         }),
       })
 

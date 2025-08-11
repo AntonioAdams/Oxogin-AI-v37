@@ -1564,6 +1564,7 @@ export default function OxoginAI() {
               <Globe className="w-5 h-5" />
               New Analysis
             </Button>
+
             {/* Competitor Intel Button - Only show when analysis is complete */}
             {(desktopPrimaryCTAPrediction || mobilePrimaryCTAPrediction) && (
               <Button

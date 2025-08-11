@@ -1,6 +1,6 @@
 // Click Prediction Model - Distribution Logic
 
-import type { ScoredElement, ClickPredictionResult, PageContext, WasteBreakdown } from "./types"
+import type { ScoredElement, ClickPredictionResult, PageContext, WasteBreakdown, DOMElement } from "./types"
 import { TrafficAnalyzer } from "./traffic"
 import { RiskAssessment } from "./risk"
 import {
@@ -134,6 +134,9 @@ export class ClickDistributor {
     const riskFactors = this.riskAssessment.generateRiskFactors(element.element, context)
     const confidence = this.riskAssessment.calculateConfidenceLevel(element.element, element.score, context)
 
+    // Determine if this element is form-related
+    const isFormRelated = this.isElementFormRelated(element.element, context)
+
     return {
       elementId: element.element.id || `${element.element.tagName}-${Date.now()}`,
       predictedClicks: Math.max(predictedClicks, 0.1),
@@ -148,6 +151,86 @@ export class ClickDistributor {
       wastedSpend: Number(wastedSpend.toFixed(2)),
       avgCPC: Number(avgCPC.toFixed(2)),
       wasteBreakdown: wasteAnalysis.breakdown,
+      isFormRelated,
+    }
+  }
+
+  /**
+   * NEW: Determine if an element is form-related using same logic as WastedClickModelV53
+   */
+  private isElementFormRelated(element: DOMElement, context: PageContext): boolean {
+    const ctaText = element.text?.toLowerCase() || ""
+    const ctaHref = element.href?.toLowerCase() || ""
+    
+    // Form CTA indicators (same as WastedClickModelV53)
+    const formCTAKeywords = [
+      "sign up",
+      "register", 
+      "subscribe",
+      "join",
+      "create account",
+      "submit",
+      "send",
+      "contact us",
+      "request",
+      "apply",
+      "book",
+      "schedule",
+      "reserve",
+    ]
+
+    // Non-form CTA indicators
+    const nonFormCTAKeywords = [
+      "buy",
+      "purchase",
+      "add to cart", 
+      "checkout",
+      "order",
+      "download",
+      "install",
+      "watch",
+      "play",
+      "read more",
+      "learn more",
+      "view",
+      "browse",
+      "explore",
+      "get started",
+      "start trial",
+      "free trial",
+      "try free",
+      "start now",
+      "try now",
+    ]
+
+    const isFormCTA = 
+      formCTAKeywords.some((keyword) => ctaText.includes(keyword)) ||
+      ctaHref.includes("signup") ||
+      ctaHref.includes("register") ||
+      ctaHref.includes("contact") ||
+      ctaHref.includes("subscribe")
+
+    const isNonFormCTA = 
+      nonFormCTAKeywords.some((keyword) => ctaText.includes(keyword)) ||
+      ctaHref.includes("buy") ||
+      ctaHref.includes("purchase") ||
+      ctaHref.includes("cart") ||
+      ctaHref.includes("checkout")
+
+    // Count form fields in context
+    const formFieldCount = context.allElements?.filter(el => 
+      ["input", "textarea", "select"].includes(el.tagName.toLowerCase())
+    ).length || 0
+
+    // Apply same logic as WastedClickModelV53
+    if (isFormCTA || formFieldCount > 2) {
+      return true
+    } else if (isNonFormCTA) {
+      return false
+    } else if (formFieldCount > 0) {
+      return true // Default to form if any form fields present
+    } else {
+      return false // Default to non-form if no forms
     }
   }
 

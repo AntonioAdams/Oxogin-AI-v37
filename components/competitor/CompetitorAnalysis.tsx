@@ -463,9 +463,9 @@ export function CompetitorAnalysis({ originalData, competitorData, onCompetitorU
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-xs sm:text-sm">Projected CTR</span>
                   <div className="flex items-center gap-1">
-                    <Progress value={(originalMetrics.avgCTR * 1.3) * 1000} className="w-8 sm:w-12 h-1" />
-                    <span className={`font-bold text-xs sm:text-sm ${(originalMetrics.avgCTR * 1.3) > 0.05 ? 'text-green-600' : (originalMetrics.avgCTR * 1.3) > 0.03 ? 'text-orange-600' : 'text-red-600'}`}>
-                      {((originalMetrics.avgCTR * 1.3) * 100).toFixed(1)}%
+                    <Progress value={(originalMetrics.avgCTR * 1.475) * 1000} className="w-8 sm:w-12 h-1" />
+                    <span className={`font-bold text-xs sm:text-sm ${(originalMetrics.avgCTR * 1.475) > 0.05 ? 'text-green-600' : (originalMetrics.avgCTR * 1.475) > 0.03 ? 'text-orange-600' : 'text-red-600'}`}>
+                      {((originalMetrics.avgCTR * 1.475) * 100).toFixed(1)}%
                     </span>
                   </div>
                 </div>
@@ -532,9 +532,9 @@ export function CompetitorAnalysis({ originalData, competitorData, onCompetitorU
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-xs sm:text-sm">Projected CTR</span>
                     <div className="flex items-center gap-1">
-                      <Progress value={(competitorMetrics.avgCTR * 1.2) * 1000} className="w-8 sm:w-12 h-1" />
-                      <span className={`font-bold text-xs sm:text-sm ${(competitorMetrics.avgCTR * 1.2) > 0.05 ? 'text-green-600' : (competitorMetrics.avgCTR * 1.2) > 0.03 ? 'text-orange-600' : 'text-red-600'}`}>
-                        {((competitorMetrics.avgCTR * 1.2) * 100).toFixed(1)}%
+                      <Progress value={(competitorMetrics.avgCTR * 1.475) * 1000} className="w-8 sm:w-12 h-1" />
+                      <span className={`font-bold text-xs sm:text-sm ${(competitorMetrics.avgCTR * 1.475) > 0.05 ? 'text-green-600' : (competitorMetrics.avgCTR * 1.475) > 0.03 ? 'text-orange-600' : 'text-red-600'}`}>
+                        {((competitorMetrics.avgCTR * 1.475) * 100).toFixed(1)}%
                       </span>
                     </div>
                   </div>
