@@ -45,15 +45,7 @@ export default function OxoginAI() {
   const [isCapturing, setIsCapturing] = useState(false)
   const [capturingDevice, setCapturingDevice] = useState<"desktop" | "mobile" | null>(null)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
-  const [creditBalance, setCreditBalance] = useState<CreditBalance | null>({
-    userId: "anonymous",
-    totalCredits: 10,
-    usedCredits: 0,
-    remainingCredits: 10,
-    lastUpdated: new Date(),
-    resetDate: new Date(Date.now() + 24 * 60 * 60 * 1000),
-  })
-  const [creditRefreshTrigger, setCreditRefreshTrigger] = useState(0)
+  // Credit state now managed by global store
   const [creditsDeductedForCurrentAnalysis, setCreditsDeductedForCurrentAnalysis] = useState(false)
   const [showWelcome, setShowWelcome] = useState(true)
   const [hasSkipped, setHasSkipped] = useState(false)
@@ -729,28 +721,11 @@ export default function OxoginAI() {
       return true
     }
 
-    if (creditBalance && creditBalance.remainingCredits >= 2) {
-      // Deduct 2 credits
-      const updatedBalance = {
-        ...creditBalance,
-        usedCredits: creditBalance.usedCredits + 2,
-        remainingCredits: creditBalance.remainingCredits - 2,
-        lastUpdated: new Date(),
-      }
-      
-      setCreditBalance(updatedBalance)
-      
-      console.log("💳 Credits deducted at 90% completion:", updatedBalance.remainingCredits, "remaining")
-      
-      // Mark credits as deducted for this analysis
-      setCreditsDeductedForCurrentAnalysis(true)
-      
-      return true
-    } else {
-      console.log("💳 Insufficient credits for analysis completion")
-      return false
-    }
-  }, [creditBalance, creditsDeductedForCurrentAnalysis])
+    // Credit deductions now handled automatically by API calls via global store
+    // Just mark as deducted for this analysis to prevent double deduction
+    setCreditsDeductedForCurrentAnalysis(true)
+    return true
+  }, [creditsDeductedForCurrentAnalysis])
 
   // Single capture function that handles both desktop and mobile
   const captureWebsite = useCallback(
@@ -763,17 +738,11 @@ export default function OxoginAI() {
       trackEvent('Capture Started', {
         device: isMobile ? 'mobile' : 'desktop',
         url: url,
-        hasCredits: creditBalance ? creditBalance.remainingCredits > 0 : false,
-        creditBalance: creditBalance?.remainingCredits || 0
+        hasCredits: true, // Credit checks now handled by API
+        creditBalance: 10 // Default value - actual balance managed by global store
       })
 
-      // Check credits before starting capture
-      if (creditBalance && creditBalance.remainingCredits <= 0) {
-        if (process.env.NODE_ENV === "development") {
-          console.log("❌ No credits remaining for capture")
-        }
-        return
-      }
+      // Credit checks now handled by global store and API
 
       // Only start full loading sequence on desktop capture (the initial one)
       if (!isMobile) {
@@ -1243,7 +1212,7 @@ export default function OxoginAI() {
     },
     [
       url,
-      creditBalance,
+
       getCurrentUserId,
       triggerCreditRefresh,
       mobileCtaMatcher,
@@ -1519,11 +1488,7 @@ export default function OxoginAI() {
             <span className="text-xl font-semibold text-gray-900">Oxogin AI</span>
           </div>
           <div className="flex items-center gap-2">
-            <CreditDisplay 
-              onCreditsUpdate={setCreditBalance} 
-              refreshTrigger={creditRefreshTrigger} 
-              balance={creditBalance}
-            />
+            <CreditDisplay />
             {user ? (
               <div className="text-xs text-gray-600 truncate max-w-20">
                 {user.user_metadata?.full_name || user.email}
@@ -1552,7 +1517,7 @@ export default function OxoginAI() {
               variant="ghost"
               className="w-full justify-start gap-3 text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-lg h-12"
               onClick={() => captureWebsite(false)}
-              disabled={!url.trim() || isCapturing || creditBalance?.remainingCredits === 0}
+              disabled={!url.trim() || isCapturing}
             >
               <Target className="w-5 h-5" />
               Analyze Website
@@ -1615,11 +1580,7 @@ export default function OxoginAI() {
 
           {/* Credit Display */}
           <div className="mb-6">
-            <CreditDisplay 
-              onCreditsUpdate={setCreditBalance} 
-              refreshTrigger={creditRefreshTrigger} 
-              balance={creditBalance}
-            />
+            <CreditDisplay />
           </div>
 
           {/* User Profile Section */}
@@ -1688,7 +1649,7 @@ export default function OxoginAI() {
             onCapture={captureWebsite}
             isCapturing={isCapturing}
             capturingDevice={capturingDevice}
-            disabled={creditBalance?.remainingCredits === 0}
+            disabled={false}
           />
 
           {/* Main Content - Show Loading or Results */}

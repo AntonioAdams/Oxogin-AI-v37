@@ -98,39 +98,9 @@ export function WelcomeScreen({ onSkip }: WelcomeScreenProps) {
   const [isCapturing, setIsCapturing] = useState(false)
   const [capturingDevice, setCapturingDevice] = useState<"desktop" | "mobile" | null>(null)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
-  const [creditBalance, setCreditBalance] = useState<CreditBalance | null>(null)
-  const [creditRefreshTrigger, setCreditRefreshTrigger] = useState(0)
+  // Credit state now managed by global store
 
-  // Initialize credit balance from server on component mount
-  useEffect(() => {
-    const initializeCreditBalance = async () => {
-      try {
-        const userId = await creditManager.getCurrentUserId()
-        const response = await fetch(`/api/credits?userId=${encodeURIComponent(userId)}`)
-        const data = await response.json()
-        
-        if (data.success && data.balance) {
-          setCreditBalance(data.balance)
-          console.log("💳 WelcomeScreen: Initialized credit balance from server:", data.balance.remainingCredits, "remaining")
-        } else {
-          throw new Error(data.error || 'Failed to fetch balance')
-        }
-      } catch (error) {
-        console.error("Failed to initialize credit balance:", error)
-        // Fallback to default balance
-        setCreditBalance({
-          userId: "anonymous",
-          totalCredits: 10,
-          usedCredits: 0,
-          remainingCredits: 10,
-          lastUpdated: new Date(),
-          resetDate: new Date(Date.now() + 24 * 60 * 60 * 1000),
-        })
-      }
-    }
-
-    initializeCreditBalance()
-  }, [])
+  // Credit initialization now handled by global store
 
   // Enhanced loading state with smooth progress
   const [isFullAnalysisLoading, setIsFullAnalysisLoading] = useState(false)
@@ -632,13 +602,7 @@ export function WelcomeScreen({ onSkip }: WelcomeScreenProps) {
         return
       }
 
-      // Check credits before starting capture
-      if (creditBalance && creditBalance.remainingCredits <= 0) {
-        if (process.env.NODE_ENV === "development") {
-          console.log("❌ No credits remaining for capture")
-        }
-        return
-      }
+      // Credit checks now handled by global store and API
 
       // Only start full loading sequence on desktop capture (the initial one)
       if (!isMobile) {
@@ -748,15 +712,7 @@ export function WelcomeScreen({ onSkip }: WelcomeScreenProps) {
 
         // Update credit balance directly from API response
         if (data.creditsRemaining !== undefined && data.creditsUsed !== undefined) {
-          const updatedBalance: CreditBalance = {
-            userId: creditBalance?.userId || "anonymous",
-            totalCredits: creditBalance?.totalCredits || 10,
-            usedCredits: data.creditsUsed,
-            remainingCredits: data.creditsRemaining,
-            lastUpdated: new Date(),
-            resetDate: creditBalance?.resetDate || new Date(Date.now() + 24 * 60 * 60 * 1000),
-          }
-          setCreditBalance(updatedBalance)
+          // Credit updates now handled by global store via API side effects
           
           if (process.env.NODE_ENV === "development") {
             console.log("💳 Credits updated directly from API response:", data.creditsRemaining, "remaining")
@@ -1099,7 +1055,7 @@ export function WelcomeScreen({ onSkip }: WelcomeScreenProps) {
     },
     [
       url,
-      creditBalance,
+
       getCurrentUserId,
       triggerCreditRefresh,
       mobileCtaMatcher,
@@ -1880,11 +1836,7 @@ export function WelcomeScreen({ onSkip }: WelcomeScreenProps) {
 
             {/* Credit Display */}
             <div className="mb-6">
-              <CreditDisplay 
-                onCreditsUpdate={setCreditBalance} 
-                refreshTrigger={creditRefreshTrigger} 
-                balance={creditBalance}
-              />
+              <CreditDisplay />
             </div>
 
             {/* Bottom Section */}
@@ -2028,11 +1980,7 @@ export function WelcomeScreen({ onSkip }: WelcomeScreenProps) {
 
             {/* Credit Display */}
             <div className="mb-6">
-              <CreditDisplay 
-                onCreditsUpdate={setCreditBalance} 
-                refreshTrigger={creditRefreshTrigger} 
-                balance={creditBalance}
-              />
+              <CreditDisplay />
             </div>
 
             {/* Bottom Section */}
@@ -2256,11 +2204,7 @@ export function WelcomeScreen({ onSkip }: WelcomeScreenProps) {
 
             {/* Credit Display */}
             <div className="mb-6">
-              <CreditDisplay 
-                onCreditsUpdate={setCreditBalance} 
-                refreshTrigger={creditRefreshTrigger} 
-                balance={creditBalance}
-              />
+              <CreditDisplay />
             </div>
 
             {/* Bottom Section */}
@@ -2411,9 +2355,7 @@ export function WelcomeScreen({ onSkip }: WelcomeScreenProps) {
           </div>
           <div className="flex items-center gap-2">
             <CreditDisplay 
-              onCreditsUpdate={setCreditBalance} 
-              refreshTrigger={creditRefreshTrigger} 
-              balance={creditBalance}
+
             />
             {/* Mobile Menu Dropdown */}
             <DropdownMenu>
@@ -2583,9 +2525,7 @@ export function WelcomeScreen({ onSkip }: WelcomeScreenProps) {
           {/* Credit Display */}
           <div className="mb-6">
             <CreditDisplay 
-              onCreditsUpdate={setCreditBalance} 
-              refreshTrigger={creditRefreshTrigger} 
-              balance={creditBalance}
+
             />
           </div>
 

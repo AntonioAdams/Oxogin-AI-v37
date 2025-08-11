@@ -6,98 +6,43 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { CreditCard, RefreshCw, History, ChevronDown, ChevronUp, RotateCcw, Trash2 } from "lucide-react"
 import type { CreditBalance } from "@/lib/credits/types"
-import { creditManager } from "@/lib/credits/manager"
+import { globalCreditStore } from "@/lib/credits/global-store"
 
 interface CreditDisplayProps {
-  onCreditsUpdate?: (balance: CreditBalance) => void
-  refreshTrigger?: number // Keep this to maintain compatibility
-  balance?: CreditBalance | null // Pass balance from parent
+  // No props needed - component manages its own state via global store
 }
 
-export function CreditDisplay({ onCreditsUpdate, refreshTrigger, balance: parentBalance }: CreditDisplayProps) {
-  // Use parent balance or default to 10 credits
-  const [balance, setBalance] = useState<CreditBalance>({
-    userId: "anonymous",
-    totalCredits: 10,
-    usedCredits: 0,
-    remainingCredits: 10,
-    lastUpdated: new Date(),
-    resetDate: new Date(Date.now() + 24 * 60 * 60 * 1000),
-  })
+export function CreditDisplay({}: CreditDisplayProps) {
+  // Get initial balance from global store
+  const [balance, setBalance] = useState<CreditBalance>(globalCreditStore.getBalance())
   const [isExpanded, setIsExpanded] = useState(false)
   const [isClient, setIsClient] = useState(false)
-  const [lastTrigger, setLastTrigger] = useState<number>(0)
   const [isLoading, setIsLoading] = useState(false)
   const [isResetting, setIsResetting] = useState(false)
   const [isClearing, setIsClearing] = useState(false)
 
-  // Ensure we're on the client side and load initial balance
+  // Subscribe to global store updates
   useEffect(() => {
     setIsClient(true)
-    loadInitialBalance()
+    
+    // Subscribe to balance changes from global store
+    const unsubscribe = globalCreditStore.subscribe((newBalance) => {
+      setBalance(newBalance)
+    })
+    
+    // Cleanup subscription
+    return unsubscribe
   }, [])
 
-  // Load initial balance from server API
-  const loadInitialBalance = async () => {
-    try {
-      const userId = await creditManager.getCurrentUserId()
-      const response = await fetch(`/api/credits?userId=${encodeURIComponent(userId)}`)
-      const data = await response.json()
-      
-      if (data.success && data.balance) {
-        setBalance(data.balance)
-        onCreditsUpdate?.(data.balance)
-        console.log("💳 Loaded initial balance from server:", data.balance.remainingCredits, "remaining")
-      } else {
-        throw new Error(data.error || 'Failed to fetch balance')
-      }
-    } catch (error) {
-      console.error("Failed to load initial credit balance:", error)
-      // Fallback to default balance
-      const fallbackBalance = {
-        userId: "anonymous",
-        totalCredits: 10,
-        usedCredits: 0,
-        remainingCredits: 10,
-        lastUpdated: new Date(),
-        resetDate: new Date(Date.now() + 24 * 60 * 60 * 1000),
-      }
-      setBalance(fallbackBalance)
-      onCreditsUpdate?.(fallbackBalance)
-    }
-  }
+  // Global store handles initial loading automatically
 
-  // Update balance when parent balance changes
-  useEffect(() => {
-    if (parentBalance) {
-      setBalance(parentBalance)
-    }
-  }, [parentBalance])
+  // No longer needed - global store handles all updates
 
-  // Handle trigger changes - refresh from storage
-  useEffect(() => {
-    if (refreshTrigger && refreshTrigger > lastTrigger && isClient) {
-      console.log("💳 Refresh triggered:", refreshTrigger)
-      setLastTrigger(refreshTrigger)
-      refreshBalance()
-    }
-  }, [refreshTrigger, lastTrigger, isClient])
-
-  // Refresh balance from server API
+  // Refresh balance via global store
   const refreshBalance = async () => {
     try {
       setIsLoading(true)
-      const userId = await creditManager.getCurrentUserId()
-      const response = await fetch(`/api/credits?userId=${encodeURIComponent(userId)}`)
-      const data = await response.json()
-      
-      if (data.success && data.balance) {
-        setBalance(data.balance)
-        onCreditsUpdate?.(data.balance)
-        console.log("💳 Refreshed balance from server:", data.balance.remainingCredits, "remaining")
-      } else {
-        throw new Error(data.error || 'Failed to fetch balance')
-      }
+      await globalCreditStore.refresh()
     } catch (error) {
       console.error("Failed to refresh credit balance:", error)
     } finally {
@@ -110,28 +55,7 @@ export function CreditDisplay({ onCreditsUpdate, refreshTrigger, balance: parent
 
     try {
       setIsResetting(true)
-      
-      // Use server API to reset credits
-      const userId = await creditManager.getCurrentUserId()
-      const response = await fetch('/api/credits', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          action: 'reset',
-          userId: userId
-        })
-      })
-      
-      const data = await response.json()
-      if (data.success && data.balance) {
-        setBalance(data.balance)
-        onCreditsUpdate?.(data.balance)
-        console.log("🔄 Credits reset to:", data.balance.remainingCredits)
-      } else {
-        throw new Error(data.error || 'Failed to reset credits')
-      }
+      await globalCreditStore.reset()
     } catch (error) {
       console.error("Error resetting credits:", error)
     } finally {
@@ -144,28 +68,7 @@ export function CreditDisplay({ onCreditsUpdate, refreshTrigger, balance: parent
 
     try {
       setIsClearing(true)
-      
-      // Use server API to clear user data
-      const userId = await creditManager.getCurrentUserId()
-      const response = await fetch('/api/credits', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          action: 'clear',
-          userId: userId
-        })
-      })
-      
-      const data = await response.json()
-      if (data.success && data.balance) {
-        setBalance(data.balance)
-        onCreditsUpdate?.(data.balance)
-        console.log("🗑️ User data cleared, credits reset to:", data.balance.remainingCredits)
-      } else {
-        throw new Error(data.error || 'Failed to clear user data')
-      }
+      await globalCreditStore.clear()
     } catch (error) {
       console.error("Error clearing user data:", error)
     } finally {

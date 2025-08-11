@@ -55,15 +55,18 @@ function convertDOMData(domData: any): DOMElement[] {
   // Add buttons
   domData.buttons?.forEach((button: any, index: number) => {
     if (button.isVisible && button.text?.trim()) {
+      // Add coordinate validation and fallbacks
+      const coordinates = button.coordinates || { x: 0, y: 0, width: 100, height: 40 }
+      
       clickableElements.push({
         source: 'button',
         data: button,
         element: {
-          id: `button-${button.coordinates.x}-${button.coordinates.y}`,
+          id: `button-${coordinates.x}-${coordinates.y}`,
           tagName: "button",
           text: button.text,
           className: button.className || "",
-          coordinates: button.coordinates,
+          coordinates: coordinates,
           isVisible: button.isVisible,
           isAboveFold: button.isAboveFold,
           isInteractive: true,
@@ -80,15 +83,18 @@ function convertDOMData(domData: any): DOMElement[] {
   // Add links
   domData.links?.forEach((link: any, index: number) => {
     if (link.isVisible && link.text?.trim()) {
+      // Add coordinate validation and fallbacks
+      const coordinates = link.coordinates || { x: 0, y: 0, width: 100, height: 40 }
+      
       clickableElements.push({
         source: 'link',
         data: link,
         element: {
-          id: `link-${link.coordinates.x}-${link.coordinates.y}`,
+          id: `link-${coordinates.x}-${coordinates.y}`,
           tagName: "a",
           text: link.text,
           className: link.className || "",
-          coordinates: link.coordinates,
+          coordinates: coordinates,
           isVisible: link.isVisible,
           isAboveFold: link.isAboveFold,
           isInteractive: true,
@@ -129,12 +135,15 @@ function convertDOMData(domData: any): DOMElement[] {
 
   // Convert form containers
   domData.forms?.forEach((form: any, index: number) => {
+    // Add coordinate validation and fallbacks for forms
+    const coordinates = form.coordinates || { x: 0, y: 0, width: 300, height: 200 }
+    
     elements.push({
-      id: `form-${form.coordinates.x}-${form.coordinates.y}`,
+      id: `form-${coordinates.x}-${coordinates.y}`,
       tagName: "form",
       text: form.submitButtonText || "Submit",
       className: "",
-      coordinates: form.coordinates,
+      coordinates: coordinates,
       isVisible: true,
       isAboveFold: form.isAboveFold,
       isInteractive: true,
@@ -191,14 +200,17 @@ function convertDOMData(domData: any): DOMElement[] {
         }
       }
 
+      // Add coordinate validation and fallbacks for form fields
+      const fieldCoordinates = field.coordinates || { x: 0, y: 0, width: 200, height: 30 }
+      
       elements.push({
-        id: `field-${field.coordinates.x}-${field.coordinates.y}-${field.type}`,
+        id: `field-${fieldCoordinates.x}-${fieldCoordinates.y}-${field.type}`,
         tagName: field.type === "textarea" ? "textarea" : field.type === "select" ? "select" : "input",
         text: fieldLabel,
         className: field.attributes?.className || "",
-        coordinates: field.coordinates,
+        coordinates: fieldCoordinates,
         isVisible: true,
-        isAboveFold: field.coordinates.y < 800, // Assume fold line at 800px
+        isAboveFold: fieldCoordinates.y < 800, // Assume fold line at 800px
         isInteractive: true,
         hasButtonStyling: false,
         type: field.type,

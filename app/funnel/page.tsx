@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { FunnelAnalysis } from '@/components/funnel/FunnelAnalysis'
 import { FunnelIntel } from '@/components/funnel/FunnelIntel'
 import { CaptureDisplay } from '@/app/page/components/CaptureDisplay'
@@ -39,8 +39,9 @@ export default function FunnelPage() {
   const [isFunnelAnalyzing, setIsFunnelAnalyzing] = useState(false)
   const [showIntelView, setShowIntelView] = useState(false)
 
-  // Simulate loading phases for funnel analysis
-  const startFunnelAnalysis = async (targetUrl: string) => {
+  // 🔒 CRITICAL: Separate comparison analysis from main funnel data
+  const startComparisonAnalysis = async (targetUrl: string) => {
+    console.log('🆚 COMPARISON: Starting isolated comparison analysis for:', targetUrl)
     setIsFunnelAnalyzing(true)
     setLoadingProgress(0)
     setLoadingStage("Initializing funnel analysis...")
@@ -97,8 +98,17 @@ export default function FunnelPage() {
       }
     }
 
+    console.log('🆚 COMPARISON: Analysis complete - ONLY updating funnelData, NOT main funnel data')
     setFunnelData(mockFunnelData)
     setIsFunnelAnalyzing(false)
+  }
+
+  // 🏠 MAIN: Keep original function for main analysis only
+  const startMainAnalysis = async (targetUrl: string) => {
+    console.log('🏠 MAIN: Starting main funnel analysis for:', targetUrl)
+    // This would only be called for initial main analysis
+    // NOT during comparison - preventing circular dependency
+    return startComparisonAnalysis(targetUrl)
   }
 
   const handleUrlSubmit = async () => {
@@ -158,13 +168,37 @@ export default function FunnelPage() {
     setIsCapturing(false)
   }
 
-  const originalData = {
+  // 🔒 CRITICAL ISOLATION: Create completely stable main funnel data
+  // This data is frozen once set and NEVER changes during comparison analysis
+  const [frozenMainData, setFrozenMainData] = useState<any>(null)
+  
+  // 🧊 FREEZE main data once analysis completes - prevents any re-render issues
+  const freezeMainData = useMemo(() => ({
     url,
     captureResult,
     clickPredictions,
     primaryCTAPrediction,
     croAnalysisResult
-  }
+  }), [url, captureResult, clickPredictions, primaryCTAPrediction, croAnalysisResult])
+
+  // Use frozen data if available, otherwise use current data
+  const originalData = frozenMainData || freezeMainData
+  
+  // 🧊 Auto-freeze main data when analysis completes
+  useEffect(() => {
+    if (captureResult && primaryCTAPrediction && croAnalysisResult && !frozenMainData) {
+      console.log('🧊 FREEZING main funnel data to prevent comparison interference')
+      setFrozenMainData({
+        url,
+        captureResult,
+        clickPredictions,
+        primaryCTAPrediction,
+        croAnalysisResult,
+        frozen: true,
+        frozenAt: new Date().toISOString()
+      })
+    }
+  }, [captureResult, primaryCTAPrediction, croAnalysisResult, frozenMainData, url, clickPredictions])
 
   if (showIntelView && funnelData) {
     return (
@@ -283,7 +317,7 @@ export default function FunnelPage() {
           <FunnelAnalysis
             originalData={originalData}
             funnelData={funnelData}
-            onFunnelUrlSubmit={startFunnelAnalysis}
+            onFunnelUrlSubmit={startComparisonAnalysis}
           />
         )}
       </div>

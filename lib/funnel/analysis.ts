@@ -493,9 +493,73 @@ export function analyzeFunnelFromCapture(
 }
 
 /**
- * Update funnel data with step 2 results
+ * Update funnel data with step 2 results and post-click prediction
  */
-export function updateFunnelWithStep2(
+export async function updateFunnelWithStep2(
+  currentFunnel: FunnelData,
+  step2: FunnelStep,
+  enhanceWithPostClick: boolean = true
+): Promise<FunnelData> {
+  if (!currentFunnel.step1) {
+    return currentFunnel
+  }
+  
+  let enhancedStep2 = step2
+  
+  // Add post-click conversion prediction if enabled
+  if (enhanceWithPostClick && currentFunnel.step1?.captureResult && step2.captureResult) {
+    try {
+      const postClickResponse = await fetch('/api/analyze-post-click', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          step1CaptureResult: currentFunnel.step1.captureResult,
+          step2CaptureResult: step2.captureResult,
+          audienceWarmth: 'warm', // Can be made configurable
+          mode: 'multiplicative'
+        })
+      })
+      
+      if (postClickResponse.ok) {
+        const postClickAnalysis = await postClickResponse.json()
+        
+        // Use post-click prediction for more accurate CTR
+        enhancedStep2 = {
+          ...step2,
+          predictedCTR: postClickAnalysis.metrics.predictedCTR,
+          predictedClicks: postClickAnalysis.metrics.predictedClicks,
+          postClickPrediction: postClickAnalysis.prediction
+        }
+        
+        console.log('🔮 Enhanced step 2 with post-click prediction:', {
+          originalCTR: step2.predictedCTR,
+          enhancedCTR: enhancedStep2.predictedCTR,
+          factors: postClickAnalysis.metrics.factorImpacts.length
+        })
+      }
+    } catch (error) {
+      console.warn('⚠️ Post-click prediction failed, using basic CTR:', error)
+      // Continue with original step2 data
+    }
+  }
+  
+  const metrics = calculateFunnelMetrics(currentFunnel.step1, enhancedStep2, currentFunnel.n1)
+  
+  return {
+    ...currentFunnel,
+    step2: enhancedStep2,
+    type: 'non-form', // Two-step funnel
+    n2: metrics.n2,
+    p2: metrics.p2,
+    pTotal: metrics.pTotal,
+    nConv: metrics.nConv
+  }
+}
+
+/**
+ * Sync version of updateFunnelWithStep2 for compatibility
+ */
+export function updateFunnelWithStep2Sync(
   currentFunnel: FunnelData,
   step2: FunnelStep
 ): FunnelData {

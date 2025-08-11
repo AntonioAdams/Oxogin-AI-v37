@@ -172,6 +172,16 @@ export async function POST(request: NextRequest) {
         reason: "Full analysis (desktop + mobile)",
       })
 
+      // Update global credit store on successful deduction
+      if (typeof global !== 'undefined') {
+        try {
+          const { globalCreditStore } = await import('@/lib/credits/global-store')
+          globalCreditStore.updateBalance(updatedBalance)
+        } catch (error) {
+          console.warn('Failed to update global credit store:', error)
+        }
+      }
+
       apiLogger.info("Credits deducted for successful capture", {
         requestId,
         userId: actualUserId,

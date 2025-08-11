@@ -1,6 +1,7 @@
 // Funnel Analysis Types
 
 import type { CaptureResult } from "@/app/page/types"
+import type { PostClickPrediction } from "./post-click-model"
 
 export type FunnelType = 'form' | 'non-form' | 'none'
 
@@ -11,6 +12,7 @@ export interface FunnelStep {
   ctaType: 'form' | 'button' | 'link'
   predictedCTR: number
   predictedClicks: number
+  postClickPrediction?: PostClickPrediction // Enhanced post-click analysis
 }
 
 export interface FunnelData {
