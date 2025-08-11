@@ -1300,8 +1300,31 @@ export function FunnelAnalysis({ originalData, funnelData, onFunnelUrlSubmit }: 
                     </div>
                   </div>
 
-                  {/* Page 2 Step - Only for non-form CTAs (three-step funnel) */}
-                  {!funnelData.primaryCTAPrediction?.isFormRelated && (
+                  {/* Page 2 Step - Dynamic based on CTA type */}
+                  {funnelData.primaryCTAPrediction?.isFormRelated ? (
+                    // Two-step funnel: Form CTA - Form submission step
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-1 sm:gap-2">
+                          <div className="w-3 h-3 bg-indigo-500 rounded-full"></div>
+                          <span className="font-medium">Form Submission</span>
+                          <span className="text-indigo-600 font-bold">Complete</span>
+                          <span className="text-gray-500">
+                            {funnelData.croAnalysisResult?.formContextAnalysis?.expectedFormCompletion ? 
+                              `${(parseFloat(funnelData.croAnalysisResult.formContextAnalysis.expectedFormCompletion) * 100).toFixed(1)}%` : 
+                              '70.0%'
+                            } • {Math.round(1000 * funnelMetrics.avgCTR * 0.7)} submissions
+                          </span>
+                        </div>
+                        <div className="text-right">
+                          <div className="font-bold">{Math.round(1000 * funnelMetrics.avgCTR * 0.7)} conversions</div>
+                        </div>
+                      </div>
+                      <div className="w-full bg-indigo-200 rounded-full h-3 sm:h-4">
+                        <div className="bg-indigo-500 h-full rounded-full" style={{ width: '70%' }}></div>
+                      </div>
+                    </div>
+                  ) : (
                     // Three-step funnel: Non-form CTA with secondary analysis
                     <div className="space-y-1">
                       <div className="flex items-center justify-between text-xs">
