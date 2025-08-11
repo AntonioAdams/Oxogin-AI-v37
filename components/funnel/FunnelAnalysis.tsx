@@ -7,7 +7,7 @@ import { TrendingUp, TrendingDown, Target, Clock, Trophy, AlertTriangle } from '
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { PostClickAnalysis } from './PostClickAnalysis'
+
 
 interface OriginalData {
   url: string
@@ -1883,38 +1883,7 @@ export function FunnelAnalysis({ originalData, funnelData, onFunnelUrlSubmit }: 
           )}
         </div>
 
-        {/* Post-Click Conversion Analysis */}
-        {(secondaryAnalysis.data?.postClickPrediction || comparisonSecondaryAnalysis.data?.postClickPrediction) && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 sm:gap-4">
-            {/* Your Site Post-Click Analysis */}
-            {secondaryAnalysis.data?.postClickPrediction && (
-              <PostClickAnalysis 
-                prediction={secondaryAnalysis.data.postClickPrediction}
-                className="border-blue-200"
-              />
-            )}
-            
-            {/* Comparison Site Post-Click Analysis */}
-            {comparisonSecondaryAnalysis.data?.postClickPrediction && (
-              <PostClickAnalysis 
-                prediction={comparisonSecondaryAnalysis.data.postClickPrediction}
-                className="border-purple-200"
-              />
-            )}
-            
-            {/* Placeholder for missing analysis */}
-            {secondaryAnalysis.data?.postClickPrediction && !comparisonSecondaryAnalysis.data?.postClickPrediction && (
-              <Card className="border-gray-300">
-                <CardContent className="p-4 flex items-center justify-center text-gray-500 text-center">
-                  <div>
-                    <div className="text-sm font-medium mb-2">Post-Click Analysis</div>
-                    <div className="text-xs opacity-75">Available after comparison funnel analysis</div>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-        )}
+
 
         {/* Bottom Summary Bar - Mobile Responsive */}
         {funnelMetrics ? (

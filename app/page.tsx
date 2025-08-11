@@ -1543,18 +1543,7 @@ export default function OxoginAI() {
                 Competitor Intel
               </Button>
             )}
-            {/* Funnel Button - Only show when analysis is complete */}
-            {(desktopPrimaryCTAPrediction || mobilePrimaryCTAPrediction) && (
-              <Link href={`/funnel?url=${encodeURIComponent(url)}`} className="w-full">
-                <Button
-                  variant="ghost"
-                  className="w-full justify-start gap-3 text-gray-600 hover:bg-blue-50 hover:text-blue-700 rounded-lg h-12"
-                >
-                  <TrendingUp className="w-5 h-5" />
-                  Funnel
-                </Button>
-              </Link>
-            )}
+
             {/* PDF Export Button - Only show when analysis is complete */}
             {(desktopPrimaryCTAPrediction || mobilePrimaryCTAPrediction) && (
               <div className="pt-2">
