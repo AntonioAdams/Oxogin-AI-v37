@@ -1432,13 +1432,51 @@ export function FunnelAnalysis({ originalData, funnelData, onFunnelUrlSubmit }: 
                   <div className="flex justify-between items-center text-xs">
                     <div>
                       <span className="text-gray-600">Conversion rate</span>
-                      <div className={`font-bold text-lg ${funnelMetrics.avgCTR > 0.04 ? 'text-green-600' : funnelMetrics.avgCTR > 0.02 ? 'text-yellow-600' : 'text-red-600'}`}>
-                        {(funnelMetrics.avgCTR * 100).toFixed(1)}%
+                      <div className={`font-bold text-lg ${(() => {
+                        // Calculate final conversion rate based on funnel type
+                        const isFormCTA = funnelData.primaryCTAPrediction?.isFormRelated
+                        const finalConversionRate = isFormCTA 
+                          ? funnelMetrics.avgCTR * 0.7  // Two-step: Page 1 CTR × form completion rate
+                          : comparisonSecondaryAnalysis.data?.primaryCTAPrediction?.ctr 
+                            ? funnelMetrics.avgCTR * comparisonSecondaryAnalysis.data.primaryCTAPrediction.ctr  // Three-step: Page 1 CTR × Page 2 CTR
+                            : funnelMetrics.avgCTR  // Fallback to Page 1 CTR if no secondary data
+                        
+                        return finalConversionRate > 0.04 ? 'text-green-600' : finalConversionRate > 0.02 ? 'text-yellow-600' : 'text-red-600'
+                      })()}`}>
+                        {(() => {
+                          // Display final conversion rate based on funnel type
+                          const isFormCTA = funnelData.primaryCTAPrediction?.isFormRelated
+                          if (isFormCTA) {
+                            // Two-step: Page 1 CTR × form completion rate (70%)
+                            return (funnelMetrics.avgCTR * 0.7 * 100).toFixed(1) + '%'
+                          } else if (comparisonSecondaryAnalysis.data?.primaryCTAPrediction?.ctr) {
+                            // Three-step: Page 1 CTR × Page 2 CTR
+                            return (funnelMetrics.avgCTR * comparisonSecondaryAnalysis.data.primaryCTAPrediction.ctr * 100).toFixed(1) + '%'
+                          } else {
+                            // Fallback to Page 1 CTR if no secondary data yet
+                            return (funnelMetrics.avgCTR * 100).toFixed(1) + '%'
+                          }
+                        })()}
                       </div>
                     </div>
                     <div className="text-right">
                       <span className="text-gray-600">Users who converted</span>
-                      <div className="font-bold text-lg">{Math.round(1000 * funnelMetrics.avgCTR)}</div>
+                      <div className="font-bold text-lg">
+                        {(() => {
+                          // Display final conversion count based on funnel type
+                          const isFormCTA = funnelData.primaryCTAPrediction?.isFormRelated
+                          if (isFormCTA) {
+                            // Two-step: 1000 × Page 1 CTR × form completion rate (70%)
+                            return Math.round(1000 * funnelMetrics.avgCTR * 0.7)
+                          } else if (comparisonSecondaryAnalysis.data?.primaryCTAPrediction?.ctr) {
+                            // Three-step: 1000 × Page 1 CTR × Page 2 CTR
+                            return Math.round(1000 * funnelMetrics.avgCTR * comparisonSecondaryAnalysis.data.primaryCTAPrediction.ctr)
+                          } else {
+                            // Fallback to Page 1 conversions if no secondary data yet
+                            return Math.round(1000 * funnelMetrics.avgCTR)
+                          }
+                        })()}
+                      </div>
                     </div>
                   </div>
                   <div className="mt-2">
