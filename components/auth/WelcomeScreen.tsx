@@ -2139,18 +2139,7 @@ export function WelcomeScreen({ onSkip }: WelcomeScreenProps) {
                   )}
                 </Button>
               )}
-              {/* Funnel Button - Only show when analysis is complete */}
-              {(desktopPrimaryCTAPrediction || mobilePrimaryCTAPrediction) && (
-                <Link href={`/funnel?url=${encodeURIComponent(url)}`} className="w-full">
-                  <Button
-                    variant="ghost"
-                    className="w-full justify-start gap-3 text-gray-600 hover:bg-blue-50 hover:text-blue-700 rounded-lg h-12"
-                  >
-                    <TrendingUp className="w-5 h-5" />
-                    <span className="flex-1 text-left">Funnel</span>
-                  </Button>
-                </Link>
-              )}
+
               {/* PDF Export Button - Only show when analysis is complete */}
               {(desktopPrimaryCTAPrediction || mobilePrimaryCTAPrediction) && (
                 <div className="pt-2">
