@@ -18,12 +18,15 @@ import { AuthModal } from "./AuthModal"
 import { CaptureDisplay } from "@/app/page/components/CaptureDisplay"
 import { CompetitorAnalysis } from "@/components/competitor/CompetitorAnalysis"
 import { FunnelAnalysis } from "@/components/funnel/FunnelAnalysis"
+import Link from "next/link"
+import { detectPrimaryCtaType, followPrimaryCta, extractPrimaryCta } from "@/lib/funnel/analysis"
+import { fetchClickPredictions } from "@/app/page/utils"
 
 import { CreditDisplay } from "@/components/credits/CreditDisplay"
 import { PDFExportButton } from "@/components/ui/pdf-export-button"
 import { processFormsForDisplay } from "@/lib/form"
 import { useCTAMatcher } from "@/app/page/hooks/useCTAMatcher"
-import { findCTAPrediction, fetchClickPredictions } from "@/app/page/utils"
+import { findCTAPrediction } from "@/app/page/utils"
 import { creditManager } from "@/lib/credits/manager"
 import { analysisStorage, type SavedAnalysis } from "@/lib/analysis/storage"
 import type { ScaledFormData } from "@/lib/form/schema"
@@ -46,6 +49,7 @@ import {
   Menu,
   ChevronDown,
   FileDown,
+  TrendingUp,
 } from "lucide-react"
 import { ThemeToggle } from "@/components/ui/theme-toggle"
 import EnhancedLoadingScreen from "@/components/ui/enhanced-loading-screen"
@@ -141,6 +145,13 @@ export function WelcomeScreen({ onSkip }: WelcomeScreenProps) {
     mobileAnalysis: false,
     mobileOpenAI: false,
   })
+
+  // Two-step funnel state
+  const [funnelType, setFunnelType] = useState<'form' | 'non-form' | 'none'>('none')
+  const [step2CaptureResult, setStep2CaptureResult] = useState<any>(null)
+  const [step2AnalysisResult, setStep2AnalysisResult] = useState<any>(null)
+  const [step2PrimaryCTAPrediction, setStep2PrimaryCTAPrediction] = useState<any>(null)
+  const [isStep2Processing, setIsStep2Processing] = useState(false)
   const progressIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
   // Desktop state
@@ -509,6 +520,111 @@ export function WelcomeScreen({ onSkip }: WelcomeScreenProps) {
     [mobileCaptureResult, desktopCaptureResult],
   )
 
+  // Two-step funnel analysis handler
+  const handleTwoStepFunnelAnalysis = useCallback(async (
+    ctaInsight: any,
+    captureResult: any,
+    prediction: any
+  ) => {
+    try {
+      console.log("🔄 Starting two-step funnel analysis...")
+      
+      // Step 1: Detect if this is a form or non-form CTA
+      const detectedFunnelType = detectPrimaryCtaType(captureResult)
+      setFunnelType(detectedFunnelType)
+      
+      console.log(`🎯 Detected funnel type: ${detectedFunnelType}`)
+      
+      if (detectedFunnelType === 'form') {
+        console.log("✅ Form funnel detected - single step complete")
+        return // Form funnel = single step, nothing more to do
+      }
+      
+      if (detectedFunnelType === 'non-form') {
+        console.log("🚀 Non-form funnel detected - proceeding to step 2...")
+        setIsStep2Processing(true)
+        
+        // Step 2: Try to follow the CTA to the next page
+        const followResult = followPrimaryCta(captureResult, url)
+        
+        if (!followResult || !followResult.nextUrl || followResult.nextUrl === url) {
+          console.log(`⚠️ Cannot follow CTA: ${followResult?.reason || 'No next URL'}`)
+          setIsStep2Processing(false)
+          return
+        }
+        
+        console.log(`🔗 Following CTA to: ${followResult.nextUrl}`)
+        setProgressSmooth(85, `Capturing step 2: ${new URL(followResult.nextUrl).hostname}...`)
+        
+        // Step 3: Capture the second page
+        const step2Response = await fetch("/api/capture", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+            url: followResult.nextUrl, 
+            isMobile: false,
+            userId: getCurrentUserId()
+          })
+        })
+        
+        if (!step2Response.ok) {
+          console.error("❌ Step 2 capture failed:", step2Response.status)
+          setIsStep2Processing(false)
+          return
+        }
+        
+        const step2Data = await step2Response.json()
+        setStep2CaptureResult(step2Data)
+        console.log("✅ Step 2 capture successful")
+        
+        setProgressSmooth(90, "Analyzing step 2 conversion action...")
+        
+        // Step 4: Analyze the CTA on the second page
+        const step2Response2 = await fetch(step2Data.screenshot)
+        const step2Blob = await step2Response2.blob()
+        
+        const step2FormData = new FormData()
+        step2FormData.append("image", step2Blob, "step2-screenshot.png")
+        step2FormData.append("domData", JSON.stringify(step2Data.domData))
+        
+        const step2AnalysisResponse = await fetch("/api/analyze-cta", {
+          method: "POST",
+          body: step2FormData,
+        })
+        
+        if (step2AnalysisResponse.ok) {
+          const step2AnalysisData = await step2AnalysisResponse.json()
+          setStep2AnalysisResult(step2AnalysisData.result)
+          
+          // Step 5: Get click predictions for step 2
+          const step2Predictions = await fetchClickPredictions(
+            step2Data,
+            () => {}, // We don't need to set the full predictions array
+            false, // Desktop
+            getCurrentUserId()
+          )
+          
+          if (step2Predictions && step2Predictions.length > 0) {
+            // Find the primary CTA prediction for step 2
+            const step2PrimaryPrediction = step2Predictions[0] // First prediction is usually primary
+            setStep2PrimaryCTAPrediction(step2PrimaryPrediction)
+            
+            console.log("✅ Two-step funnel analysis complete!")
+            console.log(`📊 Step 1 CTR: ${prediction.ctr * 100}%`)
+            console.log(`📊 Step 2 Conversion Rate: ${step2PrimaryPrediction.ctr * 100}%`)
+            
+            setProgressSmooth(95, "Two-step funnel analysis complete!")
+          }
+        }
+        
+        setIsStep2Processing(false)
+      }
+    } catch (error) {
+      console.error("❌ Two-step funnel analysis failed:", error)
+      setIsStep2Processing(false)
+    }
+  }, [url, detectPrimaryCtaType, followPrimaryCta, getCurrentUserId, setProgressSmooth, fetchClickPredictions])
+
   // Single capture function that handles both desktop and mobile
   const captureWebsite = useCallback(
     async (isMobile = false) => {
@@ -867,7 +983,14 @@ export function WelcomeScreen({ onSkip }: WelcomeScreenProps) {
                   }, 100)
                 }
 
-                // STEP 5: OpenAI analysis already running in background (started at 30-65%)
+                // STEP 5: Two-Step Funnel Analysis for Non-Form CTAs (Desktop Only)
+                if (!isMobile && analysisData.result && prediction) {
+                  setTimeout(async () => {
+                    await handleTwoStepFunnelAnalysis(analysisData.result, data, prediction)
+                  }, 500) // Small delay to let tooltip render
+                }
+
+                // STEP 6: OpenAI analysis already running in background (started at 30-65%)
                 console.log(`🧠 OpenAI analysis already running in background for ${isMobile ? "mobile" : "desktop"} - will complete soon`)
                 
                 // Add a fallback mechanism to ensure analysis completes
@@ -990,7 +1113,11 @@ export function WelcomeScreen({ onSkip }: WelcomeScreenProps) {
   // Check if analysis is complete and hide loading
   const checkIfAnalysisComplete = useCallback(() => {
     // Wait for both desktop and mobile analysis to complete
-    if (desktopAnalysisResult && mobileAnalysisResult) {
+    // For non-form funnels, also wait for step 2 to complete (if processing)
+    const isBasicAnalysisComplete = desktopAnalysisResult && mobileAnalysisResult
+    const isTwoStepFunnelComplete = funnelType === 'form' || funnelType === 'none' || !isStep2Processing
+    
+    if (isBasicAnalysisComplete && isTwoStepFunnelComplete) {
       setProgressSmooth(98, "Finalizing results...")
 
       // Wait a bit then complete
@@ -1009,7 +1136,7 @@ export function WelcomeScreen({ onSkip }: WelcomeScreenProps) {
         }, 2000)
       }, 1000)
     }
-  }, [desktopAnalysisResult, mobileAnalysisResult, setProgressSmooth])
+  }, [desktopAnalysisResult, mobileAnalysisResult, funnelType, isStep2Processing, setProgressSmooth])
 
   // Effect to check completion when analysis results change
   useEffect(() => {
@@ -2063,6 +2190,18 @@ export function WelcomeScreen({ onSkip }: WelcomeScreenProps) {
                     </Badge>
                   )}
                 </Button>
+              )}
+              {/* Funnel Button - Only show when analysis is complete */}
+              {(desktopPrimaryCTAPrediction || mobilePrimaryCTAPrediction) && (
+                <Link href={`/funnel?url=${encodeURIComponent(url)}`} className="w-full">
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start gap-3 text-gray-600 hover:bg-blue-50 hover:text-blue-700 rounded-lg h-12"
+                  >
+                    <TrendingUp className="w-5 h-5" />
+                    <span className="flex-1 text-left">Funnel</span>
+                  </Button>
+                </Link>
               )}
               {/* PDF Export Button - Only show when analysis is complete */}
               {(desktopPrimaryCTAPrediction || mobilePrimaryCTAPrediction) && (

@@ -15,7 +15,13 @@ export function CTATooltip({
   metrics,
   ctaText,
   isFormRelated = false,
-}: TooltipProps & { isFormRelated?: boolean }) {
+  funnelStep = 1,
+  funnelType = 'none',
+}: TooltipProps & { 
+  isFormRelated?: boolean
+  funnelStep?: 1 | 2
+  funnelType?: 'form' | 'non-form' | 'none'
+}) {
   // Add null checks and default values to prevent runtime errors
   const safeMetrics = {
     wastedClicks: metrics?.wastedClicks || 0,
@@ -39,10 +45,42 @@ export function CTATooltip({
     ...panelStyle,
   }
 
-  // Determine labels based on whether this is a form-related tooltip
-  const clicksLabel = isFormRelated ? "Leads" : "Clicks"
-  const ctrLabel = isFormRelated ? "Conversion Rate" : "CTR"
-  const clickShareLabel = isFormRelated ? "CTA Click Share" : "Click Share"
+  // Determine labels based on funnel type and step
+  const getLabels = () => {
+    if (funnelType === 'form') {
+      // Single-step form funnel
+      return {
+        clicksLabel: "Leads",
+        ctrLabel: "Conversion Rate",
+        clickShareLabel: "CTA Click Share"
+      }
+    } else if (funnelType === 'non-form') {
+      if (funnelStep === 1) {
+        // First step of two-step funnel
+        return {
+          clicksLabel: "Clicks",
+          ctrLabel: "CTR",
+          clickShareLabel: "Click Share"
+        }
+      } else {
+        // Second step of two-step funnel
+        return {
+          clicksLabel: "Conversions",
+          ctrLabel: "Conversion Rate",
+          clickShareLabel: "Conversion Share"
+        }
+      }
+    } else {
+      // Fallback to form-related logic for backward compatibility
+      return {
+        clicksLabel: isFormRelated ? "Leads" : "Clicks",
+        ctrLabel: isFormRelated ? "Conversion Rate" : "CTR",
+        clickShareLabel: isFormRelated ? "CTA Click Share" : "Click Share"
+      }
+    }
+  }
+
+  const { clicksLabel, ctrLabel, clickShareLabel } = getLabels()
 
   // Check if mobile viewport
   const isMobile = typeof window !== "undefined" && window.innerWidth <= 768
@@ -153,7 +191,12 @@ export function CTATooltip({
           <div className="text-lg font-semibold text-gray-900">"{ctaText || "Primary CTA"}"</div>
 
           {/* Source */}
-          <div className="text-xs text-gray-500">Source: {isFormRelated ? "form-bottleneck" : "element-ctr"}</div>
+          <div className="text-xs text-gray-500">
+            {funnelType === 'form' && "Source: form-bottleneck"}
+            {funnelType === 'non-form' && funnelStep === 1 && "Source: step-1-ctr"}
+            {funnelType === 'non-form' && funnelStep === 2 && "Source: step-2-conversion"}
+            {funnelType === 'none' && `Source: ${isFormRelated ? "form-bottleneck" : "element-ctr"}`}
+          </div>
 
           {/* Main Metrics Grid */}
           <div className="grid grid-cols-3 gap-3 py-2">

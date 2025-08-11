@@ -31,6 +31,7 @@ JSON FORMAT:
   "text": "exact button text",
   "confidence": 0.8,
   "hasForm": true,
+  "isFormAssociated": true,
   "reasoning": "explanation",
   "elementType": "button",
   "alternativeTexts": ["alt1", "alt2"]
@@ -40,7 +41,7 @@ PRIORITY RULES (in order):
 1. Forms above fold (0-800px) → Primary
 2. Visually prominent buttons above fold (Hero > Header > other)
 3. Action-oriented CTAs over navigation ("Buy" > "Mac")
-4. Ignore: navigation, privacy banners, search bars
+4. Ignore: navigation, privacy banners, search bars, cookie acceptance buttons
 
 VISUAL PROMINENCE:
 - Size: Large buttons (>100px) > small buttons (<50px)
@@ -48,7 +49,15 @@ VISUAL PROMINENCE:
 - Position: Centered, hero section, significant whitespace
 - Style: Button styling, shadows, clickable appearance
 
-Focus on the ONE conversion action users should take.`;
+Focus on the ONE conversion action users should take.
+
+FORM ASSOCIATION:
+- isFormAssociated: true = CTA submits form data that is VISIBLE on current page (Submit, Sign Up, Get Started WITH visible form fields)
+- isFormAssociated: false = CTA navigates to other pages (Learn More, About, View Products) OR is for commerce/purchasing (Buy Now, Shop, Add to Cart)
+- CRITICAL: Do NOT guess about forms on other pages. Only consider visible elements.
+- COMMERCE CTAs: "Buy", "Shop", "Purchase", "Add to Cart" = isFormAssociated: false
+- hasForm: true/false = ANY form exists on current page
+- isFormAssociated: true/false = PRIMARY CTA submits visible form on current page`;
 
     const messages: any[] = [
       {
