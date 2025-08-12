@@ -13,9 +13,13 @@ export const metadata: Metadata = {
   title: "Oxogin AI - Predict Every Click",
   description: "AI-powered conversion rate optimization analysis",
   icons: {
-    icon: "/favicon.png",
+    icon: [
+      { url: "/favicon.svg", type: "image/svg+xml" },
+      { url: "/favicon.ico", sizes: "32x32", type: "image/x-icon" }
+    ],
+    apple: { url: "/favicon.svg", type: "image/svg+xml" }
   },
-    generator: 'v0.dev'
+  generator: 'v0.dev'
 }
 
 export default function RootLayout({
