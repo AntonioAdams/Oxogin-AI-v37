@@ -2584,7 +2584,7 @@ export function WelcomeScreen({ onSkip }: WelcomeScreenProps) {
               </h1>
 
               <p className="text-base sm:text-lg lg:text-xl text-gray-600 mb-8 sm:mb-12 lg:mb-16 leading-relaxed px-4">
-                Join thousands of marketers and growth professionals using AI to analyze CTAs and optimize conversions
+              Instantly predict any page’s conversion rate — no code, no spend, no wasted tests.
               </p>
 
               {/* Enhanced Input Area - Responsive */}
