@@ -59,6 +59,103 @@ export default async function ({ page, context }) {
     
     console.log('Starting browser function for:', targetUrl, 'Mobile:', isMobile);
     
+    // 0) PRELOAD INSTRUMENTATION - Patch navigation methods before site JS runs
+    await page.evaluateOnNewDocument(() => {
+      // Initialize navigation log
+      window.__ox_navLog = [];
+      window.__ox_clickHandlers = new Map();
+      
+      // Generate unique IDs for elements
+      let oxIdCounter = 0;
+      window.__generateOxId = () => 'ox_' + (++oxIdCounter);
+      
+      // Patch history methods
+      const originalPushState = history.pushState;
+      const originalReplaceState = history.replaceState;
+      
+      history.pushState = function(state, title, url) {
+        window.__ox_navLog.push({
+          timestamp: Date.now(),
+          url: url,
+          type: 'pushState',
+          sourceOxId: window.__currentProbeOxId || null
+        });
+        return originalPushState.call(this, state, title, url);
+      };
+      
+      history.replaceState = function(state, title, url) {
+        window.__ox_navLog.push({
+          timestamp: Date.now(),
+          url: url,
+          type: 'replaceState',
+          sourceOxId: window.__currentProbeOxId || null
+        });
+        return originalReplaceState.call(this, state, title, url);
+      };
+      
+      // Patch location methods
+      const originalLocationAssign = location.assign;
+      const originalLocationReplace = location.replace;
+      
+      location.assign = function(url) {
+        window.__ox_navLog.push({
+          timestamp: Date.now(),
+          url: url,
+          type: 'location.assign',
+          sourceOxId: window.__currentProbeOxId || null
+        });
+        return originalLocationAssign.call(this, url);
+      };
+      
+      location.replace = function(url) {
+        window.__ox_navLog.push({
+          timestamp: Date.now(),
+          url: url,
+          type: 'location.replace',
+          sourceOxId: window.__currentProbeOxId || null
+        });
+        return originalLocationReplace.call(this, url);
+      };
+      
+      // Patch window.open
+      const originalWindowOpen = window.open;
+      window.open = function(url, target, features) {
+        window.__ox_navLog.push({
+          timestamp: Date.now(),
+          url: url,
+          type: 'window.open',
+          target: target,
+          sourceOxId: window.__currentProbeOxId || null
+        });
+        return originalWindowOpen.call(this, url, target, features);
+      };
+      
+      // Patch anchor click
+      const originalAnchorClick = HTMLAnchorElement.prototype.click;
+      HTMLAnchorElement.prototype.click = function() {
+        window.__ox_navLog.push({
+          timestamp: Date.now(),
+          url: this.href,
+          type: 'anchor.click',
+          sourceOxId: this.__oxId || window.__currentProbeOxId || null
+        });
+        return originalAnchorClick.call(this);
+      };
+      
+      // Patch addEventListener to track click handlers
+      const originalAddEventListener = EventTarget.prototype.addEventListener;
+      EventTarget.prototype.addEventListener = function(type, listener, options) {
+        if (type === 'click' && this.nodeType === 1) {
+          const handlers = window.__ox_clickHandlers.get(this) || [];
+          handlers.push({ listener, options, timestamp: Date.now() });
+          window.__ox_clickHandlers.set(this, handlers);
+        }
+        return originalAddEventListener.call(this, type, listener, options);
+      };
+      
+      console.log('ATF navigation instrumentation loaded');
+    });
+    
     // Set shorter timeout to prevent target closure
     page.setDefaultTimeout(timeout);
     await page.setViewport({ 
@@ -94,8 +191,142 @@ export default async function ({ page, context }) {
     
     console.log('Starting DOM extraction...');
     
-    // Enhanced DOM data extraction with better button detection + NON-INTERACTIVE ELEMENTS
+    // Enhanced DOM data extraction with ATF premium URL extraction
     const domData = await page.evaluate((foldPosition) => {
+      console.log('DOM evaluation started');
+      
+      // 2) ATF VISIBILITY DETECTION - Define fold and visibility helpers
+      const viewportH = window.innerHeight;
+      const foldY = Math.min(foldPosition, viewportH + 100);
+      
+      const isVisible = (el) => {
+        const r = el.getBoundingClientRect();
+        const style = getComputedStyle(el);
+        if (style.visibility === 'hidden' || style.display === 'none') return false;
+        if (r.width <= 1 || r.height <= 1) return false;
+        
+        // Check if center point is clickable
+        const cx = Math.floor(r.left + r.width/2);
+        const cy = Math.floor(r.top + r.height/2);
+        const topEl = document.elementFromPoint(cx, cy);
+        return topEl && (el === topEl || el.contains(topEl) || topEl.contains(el));
+      };
+      
+      const isATF = (el) => {
+        const r = el.getBoundingClientRect();
+        const style = getComputedStyle(el);
+        const sticky = ['fixed', 'sticky'].includes(style.position);
+        
+        // ATF-FIRST: Pure position + visibility detection (no keyword filtering)
+        const elementTop = r.top + window.scrollY;
+        const isAboveFoldBasic = elementTop >= 0 && elementTop < foldY;
+        
+        // ATF criteria: Above fold + visible (no content bias)
+        if (isAboveFoldBasic || (sticky && r.top < 140)) {
+          // Basic visibility check - just ensure it's not hidden and has some size
+          if (style.visibility === 'hidden' || style.display === 'none') return false;
+          if (r.width <= 1 || r.height <= 1) return false;
+          
+          // Simple visibility test for all ATF elements
+          return isVisible(el);
+        }
+        
+        return false;
+      };
+      
+      // 3A) STATIC URL EXTRACTION HELPERS
+      const extractUrl = (el) => {
+        const results = [];
+        
+        // Priority 1: Self/ancestor/descendant <a[href]>
+        if (el.tagName.toLowerCase() === 'a' && el.href && el.href !== '#' && !el.href.startsWith('javascript:')) {
+          results.push({ url: el.href, source: 'href', confidence: 'high' });
+        }
+        
+        // Check ancestors for links
+        let parent = el.parentElement;
+        while (parent && parent !== document.body) {
+          if (parent.tagName.toLowerCase() === 'a' && parent.href && parent.href !== '#' && !parent.href.startsWith('javascript:')) {
+            results.push({ url: parent.href, source: 'ancestor_href', confidence: 'high' });
+            break;
+          }
+          parent = parent.parentElement;
+        }
+        
+        // Check descendants for links
+        const descendantLink = el.querySelector('a[href]:not([href="#"]):not([href^="javascript:"])');
+        if (descendantLink) {
+          results.push({ url: descendantLink.href, source: 'descendant_href', confidence: 'medium' });
+        }
+        
+        // Priority 2: Data attributes
+        const dataAttrs = ['data-href', 'data-url', 'data-destination', 'data-link', 'data-cta', 'data-track-link'];
+        for (const attr of dataAttrs) {
+          const value = el.getAttribute(attr);
+          if (value && value !== '#' && !value.startsWith('javascript:')) {
+            results.push({ url: value, source: attr, confidence: 'medium' });
+          }
+        }
+        
+        // Priority 3: Enhanced onclick parsing with better patterns
+        const onclick = el.getAttribute('onclick');
+        if (onclick) {
+          const patterns = [
+            { regex: /location\\.href\\s*=\\s*['"]([^'"]+)['"]/, source: 'location.href' },
+            { regex: /window\\.open\\s*\\(\\s*['"]([^'"]+)['"]/, source: 'window.open' },
+            { regex: /navigate\\s*\\(\\s*['"]([^'"]+)['"]/, source: 'navigate' },
+            { regex: /router\\.push\\s*\\(\\s*['"]([^'"]+)['"]/, source: 'router.push' },
+            { regex: /Link\\s*\\(\\s*\\{\\s*href:\\s*['"]([^'"]+)['"]/, source: 'Link.href' },
+            { regex: /window\\.location\\s*=\\s*['"]([^'"]+)['"]/, source: 'window.location' },
+            { regex: /href\\s*=\\s*['"]([^'"]+)['"]/, source: 'href.assignment' }
+          ];
+          
+          for (const pattern of patterns) {
+            const match = pattern.regex.exec(onclick);
+            if (match && match[1]) {
+              results.push({ url: match[1], source: 'onclick_' + pattern.source, confidence: 'medium' });
+            }
+          }
+        }
+        
+        return results;
+      };
+      
+      const inferFormUrl = (form, submitBtn) => {
+        // Use button[formaction] if present
+        if (submitBtn && submitBtn.getAttribute('formaction')) {
+          return {
+            url: submitBtn.getAttribute('formaction'),
+            source: 'formaction',
+            confidence: 'high',
+            method: submitBtn.getAttribute('formmethod') || form.method || 'GET'
+          };
+        }
+        
+        // Use form[action]
+        if (form.action && form.action !== location.href) {
+          return {
+            url: form.action,
+            source: 'form_action',
+            confidence: 'high',
+            method: form.method || 'GET'
+          };
+        }
+        
+        // Default to current URL (HTML spec)
+        return {
+          url: location.href,
+          source: 'default_current',
+          confidence: 'low',
+          method: form.method || 'GET'
+        };
+      };
+      
+      // ATF element tracking
+      const atfElements = new Set();
+      const atfEnhancedData = new Map();
+      
+      console.log('ATF visibility helpers initialized');
       try {
         console.log('DOM evaluation started');
         
@@ -106,8 +337,9 @@ export default async function ({ page, context }) {
         // ENHANCED button extraction with broader selectors (EXISTING)
         let buttons = [];
         try {
-          // Expanded selectors to catch more button-like elements
+          // EXPANDED selectors for comprehensive interactive element detection
           const buttonSelectors = [
+            // Original button selectors
             'button',
             'input[type="submit"]', 
             'input[type="button"]',
@@ -115,7 +347,16 @@ export default async function ({ page, context }) {
             '*[class*="btn"]',
             '*[class*="button"]',
             '*[class*="cta"]',
-            '*[class*="call-to-action"]'
+            '*[class*="call-to-action"]',
+            
+            // NEW: Interactive elements we were missing
+            '[role="button"]',                    // ARIA buttons
+            '[tabindex]:not([tabindex="-1"])',    // Focusable elements
+            '[onclick]',                          // Click handlers
+            '[data-toggle]',                      // Modal/dropdown triggers
+            '[data-href]', '[data-url]',          // Data-driven navigation
+            '*[class*="modal"]', '*[class*="popup"]', // Modal containers
+            '*[class*="overlay"]', '[role="dialog"]'  // Dialog elements
           ];
           
           const allButtonElements = new Set();
@@ -138,6 +379,10 @@ export default async function ({ page, context }) {
               const elementTop = rect.top + window.scrollY; // Use scroll-adjusted position
               const isAboveFold = elementTop >= 0 && elementTop < foldPosition;
               
+              // Generate unique ID for this element
+              const oxId = window.__generateOxId();
+              button.__oxId = oxId;
+              
               // Get text content more aggressively
               let text = '';
               if (button.textContent) {
@@ -155,36 +400,71 @@ export default async function ({ page, context }) {
                 return null;
               }
               
-              // Extract additional navigation clues for JavaScript-driven buttons
-              let jsNavigationClues = null
+              // Check if this is an ATF element
+              const isATFElement = isATF(button);
+              if (isATFElement) {
+                atfElements.add(button);
+              }
+              
+              // ATF PREMIUM URL EXTRACTION for buttons
+              let atfUrlData = null;
+              if (isATFElement) {
+                const urlExtractions = extractUrl(button);
+                const clickHandlers = window.__ox_clickHandlers.get(button) || [];
+                
+                atfUrlData = {
+                  urlExtractions: urlExtractions,
+                  hasClickHandlers: clickHandlers.length > 0,
+                  clickHandlerCount: clickHandlers.length,
+                  destStatus: urlExtractions.length > 0 ? 'extracted' : 'none'
+                };
+                
+                atfEnhancedData.set(oxId, atfUrlData);
+              }
+              
+              // Extract enhanced navigation clues for ALL buttons (not just ATF)
+              let enhancedNavigation = null
               try {
                 const onclick = button.getAttribute('onclick')
-                const dataHref = button.getAttribute('data-href') || button.getAttribute('data-url')
+                const dataHref = button.getAttribute('data-href') || button.getAttribute('data-url') || button.getAttribute('data-destination')
                 const dataAction = button.getAttribute('data-action')
-                const ariaHaspopup = button.getAttribute('aria-haspopup')
                 
-                // Check for common JavaScript navigation patterns
-                if (onclick || dataHref || dataAction) {
-                  jsNavigationClues = {
+                // Check parent for wrapping link
+                let parentHref = null;
+                let parent = button.parentElement;
+                while (parent && parent !== document.body) {
+                  if (parent.tagName.toLowerCase() === 'a' && parent.href) {
+                    parentHref = parent.href;
+                    break;
+                  }
+                  parent = parent.parentElement;
+                }
+                
+                if (onclick || dataHref || dataAction || parentHref) {
+                  enhancedNavigation = {
                     onclick: onclick,
                     dataHref: dataHref,
                     dataAction: dataAction,
-                    hasPopup: ariaHaspopup === 'true'
+                    parentHref: parentHref,
+                    hasNavClues: true
                   }
                 }
               } catch (jsError) {
-                console.log('Error extracting JS navigation clues:', jsError)
+                console.log('Error extracting navigation clues:', jsError)
               }
 
               const result = {
+                oxId: oxId,
                 text: text,
                 type: button.tagName.toLowerCase() === 'button' ? (button.type || 'button') : 'link',
                 className: button.className || '',
                 id: button.id || '',
                 isVisible: rect.width > 0 && rect.height > 0 && window.getComputedStyle(button).visibility !== 'hidden',
                 isAboveFold: isAboveFold,
+                isATF: isATFElement,
                 formAction: button.form ? (button.form.action || 'current page') : null,
-                jsNavigation: jsNavigationClues, // New field for JavaScript navigation clues
+                enhancedNavigation: enhancedNavigation, // Enhanced navigation clues
+                atfUrlData: atfUrlData, // ATF premium URL data
                 distanceFromTop: elementTop,
                 coordinates: {
                   x: Math.round(rect.left),
@@ -194,7 +474,7 @@ export default async function ({ page, context }) {
                 }
               };
               
-              console.log(\`Button \${index}: "\${text}" - Above fold: \${isAboveFold} - Coords: \${rect.left},\${elementTop} - Size: \${rect.width}x\${rect.height}\`);
+              console.log(\`Button \${index}: "\${text}" - Above fold: \${isAboveFold} - ATF: \${isATFElement} - Enhanced: \${!!enhancedNavigation} - Coords: \${rect.left},\${elementTop} - Size: \${rect.width}x\${rect.height}\`);
               
               return result;
             } catch (btnError) {
@@ -211,7 +491,24 @@ export default async function ({ page, context }) {
         // ENHANCED link extraction with better filtering (EXISTING)
         let links = [];
         try {
-          const linkElements = document.querySelectorAll('a[href]');
+          // EXPANDED link selectors for comprehensive navigation detection
+          const linkSelectors = [
+            'a[href]:not([href="#"]):not([href^="javascript:"])',  // Real links only
+            'a[data-href]', 'a[data-url]',                         // Data-driven links
+            '*[class*="link"]'                                     // Link-styled elements
+          ];
+          
+          const allLinkElements = new Set();
+          linkSelectors.forEach(selector => {
+            try {
+              const elements = document.querySelectorAll(selector);
+              elements.forEach(el => allLinkElements.add(el));
+            } catch (selectorError) {
+              console.log('Link selector error for:', selector, selectorError);
+            }
+          });
+          
+          const linkElements = Array.from(allLinkElements);
           console.log('Found link elements:', linkElements.length);
           
           links = Array.from(linkElements).slice(0, 100).map((link, index) => {
@@ -231,16 +528,45 @@ export default async function ({ page, context }) {
                 return null;
               }
               
+              // Generate unique ID for this element
+              const oxId = window.__generateOxId();
+              link.__oxId = oxId;
+              
+              // Check if this is an ATF element
+              const isATFElement = isATF(link);
+              if (isATFElement) {
+                atfElements.add(link);
+              }
+              
+              // ATF PREMIUM URL EXTRACTION for links
+              let atfUrlData = null;
+              if (isATFElement) {
+                const urlExtractions = extractUrl(link);
+                const clickHandlers = window.__ox_clickHandlers.get(link) || [];
+                
+                atfUrlData = {
+                  urlExtractions: urlExtractions,
+                  hasClickHandlers: clickHandlers.length > 0,
+                  clickHandlerCount: clickHandlers.length,
+                  destStatus: urlExtractions.length > 0 ? 'extracted' : 'none'
+                };
+                
+                atfEnhancedData.set(oxId, atfUrlData);
+              }
+
               const result = {
+                oxId: oxId,
                 text: text,
                 href: link.href,
                 className: link.className || '',
                 id: link.id || '',
                 isVisible: true,
                 isAboveFold: isAboveFold,
+                isATF: isATFElement,
                 hasButtonStyling: (link.className || '').toLowerCase().includes('btn') || 
                                  (link.className || '').toLowerCase().includes('button') ||
                                  (link.className || '').toLowerCase().includes('cta'),
+                atfUrlData: atfUrlData, // ATF premium URL data
                 distanceFromTop: elementTop,
                 coordinates: {
                   x: Math.round(rect.left),
@@ -706,6 +1032,199 @@ export default async function ({ page, context }) {
           belowFoldTextBlocks
         });
         
+        // 3B) ATF HYDRATION WATCHER - Monitor for href changes after hydration
+        const hydrationUpdates = [];
+        
+        if (atfElements.size > 0) {
+          const observer = new MutationObserver((mutations) => {
+            mutations.forEach((mutation) => {
+              if (mutation.type === 'attributes' && 
+                  ['href', 'data-href', 'data-url', 'data-destination', 'data-link', 'data-cta'].includes(mutation.attributeName)) {
+                
+                const element = mutation.target;
+                if (atfElements.has(element)) {
+                  const oxId = element.__oxId;
+                  const newUrlExtractions = extractUrl(element);
+                  
+                  hydrationUpdates.push({
+                    oxId: oxId,
+                    attributeName: mutation.attributeName,
+                    newValue: element.getAttribute(mutation.attributeName),
+                    urlInferences: newUrlInferences,
+                    timestamp: Date.now()
+                  });
+                  
+                  // Update the ATF data
+                  const existingData = atfEnhancedData.get(oxId) || {};
+                  existingData.urlInferences = newUrlInferences;
+                  existingData.destStatus = newUrlInferences.length > 0 ? 'hydrated' : existingData.destStatus;
+                  existingData.hydrationUpdate = true;
+                  atfEnhancedData.set(oxId, existingData);
+                  
+                  console.log(\`ATF Hydration update for \${oxId}: \${mutation.attributeName} = \${element.getAttribute(mutation.attributeName)}\`);
+                }
+              }
+            });
+          });
+          
+          // Only observe ATF subtrees
+          atfElements.forEach(element => {
+            try {
+              observer.observe(element, { 
+                attributes: true, 
+                attributeFilter: ['href', 'data-href', 'data-url', 'data-destination', 'data-link', 'data-cta'],
+                subtree: true 
+              });
+            } catch (e) {
+              console.log('Error observing element:', e);
+            }
+          });
+          
+          // Stop watching after a brief period - simplified without async
+          setTimeout(() => {
+            observer.disconnect();
+          }, 800);
+        }
+        
+        // 3C) MICRO-PROBE for unresolved ATF elements
+        const performMicroProbe = () => {
+          const probeResults = [];
+          const unresolvedElements = [];
+          
+          // Find ATF elements that still need URL resolution
+          atfElements.forEach(element => {
+            const oxId = element.__oxId;
+            const data = atfEnhancedData.get(oxId);
+            if (!data || data.destStatus === 'none' || (data.urlInferences && data.urlInferences.length === 0)) {
+              unresolvedElements.push({ element, oxId });
+            }
+          });
+          
+          console.log(\`Starting micro-probe for \${unresolvedElements.length} unresolved ATF elements\`);
+          
+          for (const { element, oxId } of unresolvedElements.slice(0, 10)) { // Increased limit to 10 for better coverage
+            try {
+              // Set current probe context
+              window.__currentProbeOxId = oxId;
+              
+              // Clear previous navigation logs
+              const logBefore = window.__ox_navLog.length;
+              
+              // Non-destructive probing sequence
+              
+              // 1. Try hover/focus events (some libs set URL on hover)
+              try {
+                element.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true, cancelable: true }));
+                element.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, cancelable: true }));
+                element.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true }));
+                if (element.focus && typeof element.focus === 'function') {
+                  element.focus();
+                }
+              } catch (e) {
+                console.log('Error in hover/focus events:', e);
+              }
+              
+              // 2. Modifier-click to trigger nav logic without navigation
+              try {
+                const modifierClickEvent = new MouseEvent('click', {
+                  bubbles: true,
+                  cancelable: true,
+                  metaKey: true, // Cmd/Ctrl key held
+                  ctrlKey: true,
+                  button: 0,
+                  buttons: 1
+                });
+                
+                element.dispatchEvent(modifierClickEvent);
+              } catch (e) {
+                console.log('Error in modifier click:', e);
+              }
+              
+              // 3. Try other interaction events that might trigger navigation setup
+              try {
+                element.dispatchEvent(new Event('touchstart', { bubbles: true, cancelable: true }));
+                element.dispatchEvent(new Event('pointerdown', { bubbles: true, cancelable: true }));
+              } catch (e) {
+                console.log('Error in touch/pointer events:', e);
+              }
+              
+              // Check for navigation attempts in our log
+              const newNavLogs = window.__ox_navLog.slice(logBefore);
+              const elementNavLogs = newNavLogs.filter(log => log.sourceOxId === oxId);
+              
+              // Re-check URL inferences after probing
+              const postProbeExtractions = extractUrl(element);
+              
+              // Check for any new attributes that might have been set
+              const postProbeAttrs = {
+                href: element.href || null,
+                dataHref: element.getAttribute('data-href') || null,
+                dataUrl: element.getAttribute('data-url') || null,
+                onclick: element.getAttribute('onclick') || null
+              };
+              
+              const probeResult = {
+                oxId: oxId,
+                elementText: element.textContent?.trim() || '',
+                elementTag: element.tagName.toLowerCase(),
+                navigationLogs: elementNavLogs,
+                postProbeInferences: postProbeInferences,
+                postProbeAttrs: postProbeAttrs,
+                probeSuccess: elementNavLogs.length > 0 || postProbeInferences.length > 0 || 
+                             (postProbeAttrs.href || postProbeAttrs.dataHref || postProbeAttrs.dataUrl)
+              };
+              
+              probeResults.push(probeResult);
+              
+              // Update ATF data with probe results
+              const existingData = atfEnhancedData.get(oxId) || {};
+              if (elementNavLogs.length > 0) {
+                existingData.destUrl = elementNavLogs[0].url;
+                existingData.destSource = elementNavLogs[0].type;
+                existingData.destConfidence = 'probe';
+                existingData.destStatus = 'probed';
+              } else if (postProbeExtractions.length > 0) {
+                existingData.urlExtractions = postProbeExtractions;
+                existingData.destStatus = 'post_probe_extracted';
+              } else if (postProbeAttrs.href || postProbeAttrs.dataHref || postProbeAttrs.dataUrl) {
+                existingData.destUrl = postProbeAttrs.href || postProbeAttrs.dataHref || postProbeAttrs.dataUrl;
+                existingData.destSource = 'post_probe_attr';
+                existingData.destConfidence = 'probe';
+                existingData.destStatus = 'probed';
+              }
+              existingData.probeAttempted = true;
+              existingData.probeResult = probeResult;
+              atfEnhancedData.set(oxId, existingData);
+              
+              console.log(\`Probe result for \${oxId} (\${element.textContent?.trim()?.substring(0,20)}...): \${probeResult.probeSuccess ? 'SUCCESS' : 'NO_RESULT'}\`);
+              
+            } catch (probeError) {
+              console.log(\`Probe error for \${oxId}:\`, probeError);
+            }
+          }
+          
+          // Clear probe context
+          window.__currentProbeOxId = null;
+          
+          return probeResults;
+        };
+        
+        // Execute ATF premium extraction pipeline
+        console.log('Starting micro-probe for unresolved elements...');
+        const probeResults = performMicroProbe();
+        
+        // Prepare final ATF data
+        const atfSummary = {
+          totalATFElements: atfElements.size,
+          elementsWithUrls: Array.from(atfEnhancedData.values()).filter(data => 
+            data.destStatus !== 'none' && (data.urlInferences?.length > 0 || data.destUrl)
+          ).length,
+          hydrationUpdates: hydrationUpdates.length,
+          probeAttempts: probeResults.length,
+          probeSuccesses: probeResults.filter(r => r.probeSuccess).length
+        };
+        
+        console.log('ATF Premium extraction complete:', atfSummary);
         console.log('DOM extraction completed successfully');
         
         return {
@@ -736,7 +1255,151 @@ export default async function ({ page, context }) {
             belowFoldVideos,
             aboveFoldTextBlocks,
             belowFoldTextBlocks
-          }
+          },
+          // ATF PREMIUM EXTRACTION RESULTS
+          atfPremium: {
+            summary: atfSummary,
+            enhancedData: Object.fromEntries(atfEnhancedData),
+            hydrationResults: hydrationUpdates,
+            probeResults: probeResults,
+            navigationLog: window.__ox_navLog || []
+          },
+          // MODAL ANALYSIS RESULTS
+          modalAnalysis: (() => {
+            const currentUrl = window.location.href;
+            const hasModalFragment = currentUrl.includes('#modal') || currentUrl.includes('#popup') || currentUrl.includes('#dialog');
+            
+            if (!hasModalFragment) {
+              return {
+                isModalState: false,
+                modalType: 'none',
+                summary: { totalModalElements: 0, formFieldsDetected: 0, deduplicatedFields: 0 }
+              };
+            }
+            
+            // MODAL STATE DETECTED
+            console.log('Modal fragment detected in URL:', currentUrl);
+            
+            // Detect modal elements
+            const modalSelectors = [
+              '.modal', '[role="dialog"]', '.popup', '.overlay',
+              '[class*="modal"]', '[class*="popup"]', '[class*="dialog"]',
+              '[id*="modal"]', '[id*="popup"]', '[id*="dialog"]'
+            ];
+            
+            const modalElements = [];
+            modalSelectors.forEach(selector => {
+              try {
+                const elements = document.querySelectorAll(selector);
+                elements.forEach(el => {
+                  if (el.offsetWidth > 0 && el.offsetHeight > 0) {
+                    modalElements.push({
+                      selector: selector,
+                      id: el.id,
+                      className: el.className,
+                      visible: true,
+                      bbox: el.getBoundingClientRect()
+                    });
+                  }
+                });
+              } catch (e) {
+                console.log('Modal selector error:', selector, e);
+              }
+            });
+            
+            // FORM FIELD DEDUPLICATION for modal state
+            const deduplicateFormFields = (fields) => {
+              if (!fields || fields.length === 0) return [];
+              
+              const uniqueFields = [];
+              const seenFields = new Set();
+              
+              for (const field of fields) {
+                const name = field.name || field.attributes?.name || field.attributes?.id || "";
+                const type = field.type || "text";
+                
+                // Round coordinates to nearest 50px to catch near-duplicates
+                const roundedX = Math.round((field.coordinates?.x || 0) / 50) * 50;
+                const roundedY = Math.round((field.coordinates?.y || 0) / 50) * 50;
+                
+                // Create unique identifier
+                const uniqueKey = \`\${name}-\${type}-\${roundedX}-\${roundedY}\`;
+                const nameKey = \`\${name}-\${type}\`;
+                
+                if (!seenFields.has(uniqueKey) && !seenFields.has(nameKey)) {
+                  uniqueFields.push(field);
+                  seenFields.add(uniqueKey);
+                  seenFields.add(nameKey);
+                }
+              }
+              
+              return uniqueFields;
+            };
+            
+            // Apply deduplication to form fields
+            const originalFormFields = formFields || [];
+            const deduplicatedFormFields = deduplicateFormFields(originalFormFields);
+            
+            // Extract modal-specific form data
+            const modalFormFields = deduplicatedFormFields.filter(field => {
+              // Exclude search fields
+              if (field.name === 'term' || field.name === 'search' || field.name === 'q') return false;
+              
+              // Include form fields that are likely part of modal
+              return field.type !== 'hidden' && field.name !== '';
+            });
+            
+            // Analyze form completion requirements
+            const requiredFields = modalFormFields.filter(field => field.required);
+            const optionalFields = modalFormFields.filter(field => !field.required);
+            
+            // Categorize field types
+            const fieldTypes = {
+              personal: modalFormFields.filter(f => ['firstname', 'lastname', 'name', 'email', 'phone'].includes(f.name)),
+              business: modalFormFields.filter(f => ['company', 'organization', 'title', 'industry'].includes(f.name)),
+              location: modalFormFields.filter(f => ['city', 'state', 'country', 'address', 'zip'].includes(f.name)),
+              intent: modalFormFields.filter(f => f.name.includes('timeline') || f.name.includes('budget') || f.name.includes('application')),
+              other: modalFormFields.filter(f => !['firstname', 'lastname', 'name', 'email', 'phone', 'company', 'organization', 'title', 'industry', 'city', 'state', 'country', 'address', 'zip'].includes(f.name) && !f.name.includes('timeline') && !f.name.includes('budget') && !f.name.includes('application'))
+            };
+            
+            return {
+              isModalState: true,
+              modalType: 'form_modal',
+              fragmentUrl: currentUrl,
+              modalElements: modalElements,
+              formAnalysis: {
+                originalFieldCount: originalFormFields.length,
+                deduplicatedFieldCount: deduplicatedFormFields.length,
+                modalFormFields: modalFormFields.length,
+                requiredFields: requiredFields.length,
+                optionalFields: optionalFields.length,
+                duplicatesRemoved: originalFormFields.length - deduplicatedFormFields.length,
+                fieldCategories: {
+                  personal: fieldTypes.personal.length,
+                  business: fieldTypes.business.length,
+                  location: fieldTypes.location.length,
+                  intent: fieldTypes.intent.length,
+                  other: fieldTypes.other.length
+                },
+                fields: modalFormFields.map(field => ({
+                  name: field.name,
+                  type: field.type,
+                  required: field.required,
+                  category: fieldTypes.personal.includes(field) ? 'personal' :
+                           fieldTypes.business.includes(field) ? 'business' :
+                           fieldTypes.location.includes(field) ? 'location' :
+                           fieldTypes.intent.includes(field) ? 'intent' : 'other'
+                }))
+              },
+              summary: {
+                totalModalElements: modalElements.length,
+                formFieldsDetected: originalFormFields.length,
+                deduplicatedFields: deduplicatedFormFields.length,
+                modalFormFields: modalFormFields.length,
+                conversionComplexity: requiredFields.length > 5 ? 'high' : requiredFields.length > 2 ? 'medium' : 'low'
+              }
+            };
+          })()
         };
       } catch (evalError) {
         console.log('Error in DOM evaluation:', evalError);
