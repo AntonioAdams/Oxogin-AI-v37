@@ -92,34 +92,39 @@ export function CROAssistantIntegrated({
     <Card className="bg-white border border-gray-200">
       <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
         <CollapsibleTrigger asChild>
-          <CardHeader className="cursor-pointer hover:bg-gray-50 transition-colors">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-purple-600 rounded-lg flex items-center justify-center">
-                  <Brain className="w-5 h-5 text-white" />
+          <CardHeader className="cursor-pointer hover:bg-gray-50 transition-colors p-3 sm:p-6 touch-manipulation">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+                <div className="w-8 h-8 sm:w-10 sm:h-10 bg-purple-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <Brain className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
                 </div>
-                <div>
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    🧠 AI Analysis
-                    <Badge variant="secondary" className="bg-purple-100 text-purple-700 border-purple-200">
+                <div className="min-w-0 flex-1">
+                  <CardTitle className="text-sm sm:text-lg flex items-center gap-1 sm:gap-2 flex-wrap">
+                    <span className="hidden sm:inline">🧠 AI Analysis</span>
+                    <span className="sm:hidden">🧠 AI</span>
+                    <Badge variant="secondary" className="bg-purple-100 text-purple-700 border-purple-200 text-xs px-1 sm:px-2">
                       {deviceType === "mobile" ? "Mobile" : "Desktop"}
                     </Badge>
                   </CardTitle>
-                  <p className="text-sm text-gray-600 mt-1">
+                  <p className="text-xs sm:text-sm text-gray-600 mt-1 hidden sm:block">
                     Comprehensive CRO analysis with actionable recommendations
+                  </p>
+                  <p className="text-xs text-gray-600 mt-1 sm:hidden">
+                    CRO recommendations
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
                 {preLoadedAnalysis && (
-                  <Badge variant="secondary" className="bg-green-100 text-green-700 border-green-200">
-                    Analysis Ready
+                  <Badge variant="secondary" className="bg-green-100 text-green-700 border-green-200 text-xs px-1 sm:px-2 hidden xs:flex">
+                    <span className="hidden sm:inline">Analysis Ready</span>
+                    <span className="sm:hidden">Ready</span>
                   </Badge>
                 )}
                 {isExpanded ? (
-                  <ChevronDown className="w-5 h-5 text-gray-500" />
+                  <ChevronDown className="w-4 h-4 sm:w-5 sm:h-5 text-gray-500" />
                 ) : (
-                  <ChevronRight className="w-5 h-5 text-gray-500" />
+                  <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5 text-gray-500" />
                 )}
               </div>
             </div>

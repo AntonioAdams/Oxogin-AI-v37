@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { captureWebsite } from "@/lib/capture"
+import { runParallelAnalysis } from "@/lib/capture/parallel-analyzer"
 import { logger } from "@/lib/utils/logger"
 import { ApplicationError, ValidationError } from "@/lib/errors/application-error"
 import { ERROR_CODE_REGISTRY } from "@/lib/errors/error-codes"
@@ -7,8 +7,6 @@ import { handleError, createErrorResponse, getHttpStatusCode } from "@/lib/error
 import { creditManager } from "@/lib/credits/manager"
 import { sanitizeUrl } from "@/lib/utils"
 import { validateUrl } from "@/lib/utils/validation"
-import { analyzeCTA } from "@/lib/ai"
-import { ClickPredictionEngine } from "@/lib/prediction/engine"
 
 const apiLogger = logger.module("api-capture")
 
@@ -40,7 +38,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { url: rawUrl, isMobile = false, userId } = body
+    const { url: rawUrl, userId } = body
+  // Note: isMobile parameter no longer needed as we capture both desktop and mobile in parallel
 
     if (!rawUrl) {
       throw new ValidationError(
@@ -118,12 +117,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    apiLogger.info(`Starting capture for URL: ${sanitizedUrl}`, {
+    apiLogger.info(`Starting parallel capture for URL: ${sanitizedUrl}`, {
       requestId,
       originalUrl: rawUrl,
       sanitizedUrl,
-      isMobile,
       userId: actualUserId,
+      mode: 'parallel (desktop + mobile)'
     })
 
     // Check environment variables
@@ -138,23 +137,39 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Perform capture with mobile option using sanitized URL
-    const result = await captureWebsite(sanitizedUrl, { isMobile })
+    // Perform parallel capture for both desktop and mobile
+    const { desktopAnalysis, mobileAnalysis, totalTime } = await runParallelAnalysis(sanitizedUrl, requestId)
 
-    // Validate result structure
-    if (!result || !result.screenshot || !result.domData) {
-      apiLogger.error("Invalid capture result structure", undefined, {
+    // Validate both results
+    if (!desktopAnalysis.captureResult || !desktopAnalysis.captureResult.screenshot || !desktopAnalysis.captureResult.domData) {
+      apiLogger.error("Invalid desktop capture result structure", undefined, {
         requestId,
-        hasResult: !!result,
-        hasScreenshot: !!result?.screenshot,
-        hasDomData: !!result?.domData,
-        screenshotLength: result?.screenshot?.length || 0,
-        domDataKeys: result?.domData ? Object.keys(result.domData) : [],
+        hasDesktopResult: !!desktopAnalysis.captureResult,
+        hasDesktopScreenshot: !!desktopAnalysis.captureResult?.screenshot,
+        hasDesktopDomData: !!desktopAnalysis.captureResult?.domData
       })
 
       throw new ApplicationError({
         code: ERROR_CODE_REGISTRY.API_CAPTURE.ERRORS.RESPONSE_GENERATION_FAILED,
-        message: "Invalid capture result from service - missing required data",
+        message: "Invalid desktop capture result from service - missing required data",
+        context,
+        severity: "high",
+        category: "processing",
+        retryable: true,
+      })
+    }
+
+    if (!mobileAnalysis.captureResult || !mobileAnalysis.captureResult.screenshot || !mobileAnalysis.captureResult.domData) {
+      apiLogger.error("Invalid mobile capture result structure", undefined, {
+        requestId,
+        hasMobileResult: !!mobileAnalysis.captureResult,
+        hasMobileScreenshot: !!mobileAnalysis.captureResult?.screenshot,
+        hasMobileDomData: !!mobileAnalysis.captureResult?.domData
+      })
+
+      throw new ApplicationError({
+        code: ERROR_CODE_REGISTRY.API_CAPTURE.ERRORS.RESPONSE_GENERATION_FAILED,
+        message: "Invalid mobile capture result from service - missing required data",
         context,
         severity: "high",
         category: "processing",
@@ -168,8 +183,8 @@ export async function POST(request: NextRequest) {
       updatedBalance = await creditManager.deductCredits(actualUserId, 2, {
         url: sanitizedUrl,
         requestId,
-        isMobile,
-        reason: "Full analysis (desktop + mobile)",
+        isMobile: false, // Default for backward compatibility
+        reason: "Parallel analysis (desktop + mobile)",
       })
 
       // Update global credit store on successful deduction
@@ -205,210 +220,99 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Add CTA analysis and click predictions for funnel feature
-    let ctaInsight = null
-    let clickPredictions = null
-    let primaryCTAPrediction = null
-    let elements = [] // Declare elements outside for debugging
+    // Parallel analysis has already been completed above
+    // Extract results for backward compatibility
+    const desktopResult = desktopAnalysis.captureResult
+    const mobileResult = mobileAnalysis.captureResult
+    
+    // Use desktop as primary result for backward compatibility
+    const result = desktopResult
+    const ctaInsight = desktopAnalysis.ctaInsight
+    const clickPredictions = desktopAnalysis.clickPredictions
+    const primaryCTAPrediction = desktopAnalysis.primaryCTAPrediction
+    const elements = desktopAnalysis.elements
 
-    try {
-      // Run CTA analysis if we have valid data
-      if (result.screenshot && result.domData) {
-        // Convert base64 screenshot to Blob for CTA analysis
-        const base64Data = result.screenshot.replace(/^data:image\/[^;]+;base64,/, '')
-        const binaryData = Buffer.from(base64Data, 'base64')
-        const imageBlob = new Blob([binaryData], { type: 'image/png' })
-        
-        const ctaResult = await analyzeCTA({
-          image: imageBlob,
-          domData: result.domData,
-        })
-        ctaInsight = ctaResult.insight
-        apiLogger.info("CTA analysis completed for capture", { requestId, ctaText: ctaInsight?.text })
-      }
-    } catch (ctaError) {
-      apiLogger.warn("CTA analysis failed during capture", ctaError as Error, { requestId })
-    }
-
-    try {
-      // Run click predictions if we have valid elements
-      if (result.domData) {
-        const predictionEngine = new ClickPredictionEngine()
-        
-        // Create elements array for prediction
-        elements = [] // Reset the array
-        
-        console.log("🔧 DEBUGGING: Creating elements for prediction:", {
-          linksInDomData: result.domData.links?.length || 0,
-          buttonsInDomData: result.domData.buttons?.length || 0,
-          formFieldsInDomData: result.domData.formFields?.length || 0,
-          sampleLink: result.domData.links?.[0],
-          sampleButton: result.domData.buttons?.[0]
-        })
-        
-        if (result.domData.links) {
-          result.domData.links.forEach((link, index) => {
-            const element = {
-              id: `link-${index}`,
-              tagName: 'a',
-              text: link.text || '',
-              href: link.href,
-              isAboveFold: link.isAboveFold,
-              isVisible: link.isVisible !== false, // Default to true if not specified
-              isInteractive: true, // Links are interactive
-              className: link.className || '',
-              coordinates: link.coordinates || { x: 0, y: 0, width: 0, height: 0 },
-              hasButtonStyling: link.hasButtonStyling || false,
-              distanceFromTop: link.distanceFromTop || 0
-            }
-            console.log(`🔧 DEBUGGING: Adding link element ${index}:`, element)
-            elements.push(element)
-          })
-        }
-
-        if (result.domData.buttons) {
-          result.domData.buttons.forEach((button, index) => {
-            const element = {
-              id: `button-${index}`,
-              tagName: 'button',
-              text: button.text || '',
-              isAboveFold: button.isAboveFold,
-              isVisible: button.isVisible !== false, // Default to true if not specified
-              isInteractive: true, // Buttons are interactive
-              className: button.className || '',
-              coordinates: button.coordinates || { x: 0, y: 0, width: 0, height: 0 },
-              distanceFromTop: button.distanceFromTop || 0
-            }
-            console.log(`🔧 DEBUGGING: Adding button element ${index}:`, element)
-            elements.push(element)
-          })
-        }
-
-        // Also add form fields if present
-        if (result.domData.formFields) {
-          result.domData.formFields.forEach((field, index) => {
-            const element = {
-              id: `field-${index}`,
-              tagName: 'input',
-              text: field.label || field.placeholder || '',
-              type: field.type || 'text',
-              isAboveFold: field.isAboveFold,
-              isVisible: field.isVisible !== false,
-              isInteractive: true, // Form fields are interactive
-              className: field.className || '',
-              coordinates: field.coordinates || { x: 0, y: 0, width: 0, height: 0 },
-              required: field.required || false,
-              label: field.label,
-              placeholder: field.placeholder,
-              distanceFromTop: field.distanceFromTop || 0
-            }
-            console.log(`🔧 DEBUGGING: Adding form field element ${index}:`, element)
-            elements.push(element)
-          })
-        }
-        
-        console.log("🔧 DEBUGGING: Total elements created:", elements.length)
-
-        if (elements.length > 0) {
-          apiLogger.info("Running click predictions", { 
-            requestId, 
-            elementsCount: elements.length,
-            linkCount: result.domData.links?.length || 0,
-            buttonCount: result.domData.buttons?.length || 0,
-            formFieldCount: result.domData.formFields?.length || 0,
-            sampleElements: elements.slice(0, 3).map(e => ({ id: e.id, tagName: e.tagName, text: e.text?.substring(0, 30), isVisible: e.isVisible, isInteractive: e.isInteractive }))
-          })
-          
-          console.log("🔧 DEBUGGING: About to call prediction engine with context:", {
-            url: sanitizedUrl,
-            deviceType: result.isMobile ? 'mobile' : 'desktop',
-            totalImpressions: 1000,
-            trafficSource: 'unknown'
-          })
-
-          const predictions = await predictionEngine.predictClicks(elements, {
-            url: sanitizedUrl,
-            deviceType: result.isMobile ? 'mobile' : 'desktop',
-            userAgent: 'capture-api',
-            viewport: { width: result.isMobile ? 375 : 1920, height: result.isMobile ? 812 : 1080 },
-            timestamp: Date.now(),
-            totalImpressions: 1000, // Default traffic estimate
-            trafficSource: 'unknown' // Default traffic source for capture analysis
-          })
-
-          console.log("🔧 DEBUGGING: Prediction engine result:", {
-            predictionsCount: predictions.predictions?.length || 0,
-            samplePrediction: predictions.predictions?.[0],
-            warnings: predictions.warnings,
-            metadata: predictions.metadata
-          })
-
-          clickPredictions = predictions.predictions
-          
-          // Find primary CTA prediction (highest predicted clicks)
-          if (clickPredictions && clickPredictions.length > 0) {
-            primaryCTAPrediction = clickPredictions.reduce((max, current) =>
-              current.predictedClicks > max.predictedClicks ? current : max
-            )
-          }
-          
-          apiLogger.info("Click predictions completed for capture", { 
-            requestId, 
-            predictionsCount: clickPredictions?.length || 0,
-            primaryCTAText: primaryCTAPrediction?.text || 'None'
-          })
-        } else {
-          apiLogger.warn("No elements available for click prediction", {
-            requestId,
-            linkCount: result.domData.links?.length || 0,
-            buttonCount: result.domData.buttons?.length || 0,
-            formFieldCount: result.domData.formFields?.length || 0,
-            hasCoordinates: {
-              links: result.domData.links?.filter(l => l.coordinates).length || 0,
-              buttons: result.domData.buttons?.filter(b => b.coordinates).length || 0
-            }
-          })
-        }
-      }
-    } catch (predictionError) {
-      apiLogger.warn("Click prediction failed during capture", predictionError as Error, { requestId })
-    }
-
-    apiLogger.info(`Successfully captured website: ${sanitizedUrl}`, {
+    apiLogger.info(`Successfully captured website (parallel): ${sanitizedUrl}`, {
       requestId,
-      title: result.domData.title,
-      buttonsFound: result.domData.buttons.length,
-      linksFound: result.domData.links.length,
-      formsFound: result.domData.forms.length,
-      formFieldsFound: result.domData.formFields?.length || 0,
-      screenshotSize: result.screenshot.length,
-      aboveFoldButtons: result.domData.foldLine.aboveFoldButtons,
-      isMobile: result.isMobile || false,
-      creditsRemaining: updatedBalance.remainingCredits,
-      hasCTAInsight: !!ctaInsight,
-      hasClickPredictions: !!clickPredictions,
-      hasPrimaryCTA: !!primaryCTAPrediction,
+      totalTime,
+      desktopTime: desktopAnalysis.analysisTime,
+      mobileTime: mobileAnalysis.analysisTime,
+      desktop: {
+        title: desktopResult.domData.title,
+        buttonsFound: desktopResult.domData.buttons.length,
+        linksFound: desktopResult.domData.links.length,
+        formsFound: desktopResult.domData.forms.length,
+        hasCTAInsight: !!desktopAnalysis.ctaInsight,
+        hasClickPredictions: !!desktopAnalysis.clickPredictions
+      },
+      mobile: {
+        title: mobileResult.domData.title,
+        buttonsFound: mobileResult.domData.buttons.length,
+        linksFound: mobileResult.domData.links.length,
+        formsFound: mobileResult.domData.forms.length,
+        hasCTAInsight: !!mobileAnalysis.ctaInsight,
+        hasClickPredictions: !!mobileAnalysis.clickPredictions
+      },
+      creditsRemaining: updatedBalance.remainingCredits
     })
 
     return NextResponse.json({
+      // Backward compatibility: primary result is desktop
       ...result,
       ctaInsight,
       clickPredictions,
       primaryCTAPrediction,
+      
+      // New parallel structure
+      desktop: {
+        captureResult: desktopResult,
+        ctaInsight: desktopAnalysis.ctaInsight,
+        clickPredictions: desktopAnalysis.clickPredictions,
+        primaryCTAPrediction: desktopAnalysis.primaryCTAPrediction,
+        elements: desktopAnalysis.elements,
+        analysisTime: desktopAnalysis.analysisTime,
+        deviceType: desktopAnalysis.deviceType
+      },
+      mobile: {
+        captureResult: mobileResult,
+        ctaInsight: mobileAnalysis.ctaInsight,
+        clickPredictions: mobileAnalysis.clickPredictions,
+        primaryCTAPrediction: mobileAnalysis.primaryCTAPrediction,
+        elements: mobileAnalysis.elements,
+        analysisTime: mobileAnalysis.analysisTime,
+        deviceType: mobileAnalysis.deviceType
+      },
+      
+      // Metadata
       requestId,
       timestamp: new Date().toISOString(),
       creditsRemaining: updatedBalance.remainingCredits,
       creditsUsed: updatedBalance.usedCredits,
-      // DEBUG: Add debugging info to response
+      totalAnalysisTime: totalTime,
+      parallelProcessing: true,
+      
+      // DEBUG: Enhanced debugging info
       debug: {
-        elementsProcessed: elements?.length || 0,
-        linksInDom: result.domData.links?.length || 0,
-        buttonsInDom: result.domData.buttons?.length || 0,
-        formFieldsInDom: result.domData.formFields?.length || 0,
-        predictionEngineResult: clickPredictions ? {
-          count: clickPredictions.length,
-          sample: clickPredictions[0]
-        } : null
+        desktopElementsProcessed: desktopAnalysis.elements?.length || 0,
+        mobileElementsProcessed: mobileAnalysis.elements?.length || 0,
+        desktop: {
+          linksInDom: desktopResult.domData.links?.length || 0,
+          buttonsInDom: desktopResult.domData.buttons?.length || 0,
+          formFieldsInDom: desktopResult.domData.formFields?.length || 0,
+          predictionEngineResult: desktopAnalysis.clickPredictions ? {
+            count: desktopAnalysis.clickPredictions.length,
+            sample: desktopAnalysis.clickPredictions[0]
+          } : null
+        },
+        mobile: {
+          linksInDom: mobileResult.domData.links?.length || 0,
+          buttonsInDom: mobileResult.domData.buttons?.length || 0,
+          formFieldsInDom: mobileResult.domData.formFields?.length || 0,
+          predictionEngineResult: mobileAnalysis.clickPredictions ? {
+            count: mobileAnalysis.clickPredictions.length,
+            sample: mobileAnalysis.clickPredictions[0]
+          } : null
+        }
       }
     })
   } catch (error) {

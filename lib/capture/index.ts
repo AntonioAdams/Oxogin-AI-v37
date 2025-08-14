@@ -54,7 +54,7 @@ export async function captureWebsite(url: string, options: { isMobile?: boolean 
     const client = getBrowserlessClient()
     const captureOptions: CaptureOptions = {
       url,
-      timeout: options.isMobile ? 25000 : 30000,
+      timeout: options.isMobile ? 15000 : 15000, // Optimized timeouts for both mobile and desktop
       width: options.isMobile ? 375 : 1920,
       height: options.isMobile ? 812 : 1080,
       foldLinePosition: options.isMobile ? 600 : 1000,

@@ -28,7 +28,7 @@ export class BrowserlessClient {
   }
 
   private createBrowserFunction(options: CaptureOptions): string {
-    const { url, timeout = 25000, width = 1920, height = 1080, foldLinePosition = 1000, isMobile = false } = options
+    const { url, timeout = 15000, width = 1920, height = 1080, foldLinePosition = 1000, isMobile = false } = options
 
     // Escape the URL properly to prevent injection issues
     const escapedUrl = url.replace(/"/g, '\\"').replace(/'/g, "\\'")
@@ -156,8 +156,8 @@ export default async function ({ page, context }) {
       console.log('ATF navigation instrumentation loaded');
     });
     
-    // Set shorter timeout to prevent target closure
-    page.setDefaultTimeout(timeout);
+    // Set optimized timeout to prevent target closure
+    page.setDefaultTimeout(Math.min(timeout, 12000));
     await page.setViewport({ 
       width, 
       height,
@@ -171,23 +171,23 @@ export default async function ({ page, context }) {
     
     console.log('Navigating to URL...');
     
-    // Navigation with more conservative settings
+    // Navigation with optimized settings
     await page.goto(targetUrl, { 
       waitUntil: "domcontentloaded",
-      timeout: Math.min(timeout, 20000) // Cap navigation timeout
+      timeout: Math.min(timeout, 12000) // Optimized navigation timeout
     });
     
     console.log('Page loaded, waiting for content...');
     
-    // Shorter wait for load state
+    // Optimized wait for load state
     try {
-      await page.waitForLoadState("load", { timeout: 10000 });
+      await page.waitForLoadState("load", { timeout: 5000 });
     } catch (e) {
       console.log("Load timeout, continuing with DOM extraction");
     }
     
-    // Shorter buffer for dynamic content
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    // Optimized buffer for dynamic content
+    await new Promise(resolve => setTimeout(resolve, 500));
     
     console.log('Starting DOM extraction...');
     

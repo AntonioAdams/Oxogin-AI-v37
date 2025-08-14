@@ -29,7 +29,7 @@ export interface SavedAnalysis {
 
 class AnalysisStorage {
   private storageKey = "cta-detector-analyses"
-  private maxAnalyses = 3 // Keep last 3 analyses to prevent quota issues
+  private maxAnalyses = 2 // Keep last 2 analyses to prevent quota issues with larger parallel data
   private saveTimeout: NodeJS.Timeout | null = null
 
   private async compressImage(blobUrl: string): Promise<string> {
@@ -57,8 +57,8 @@ class AnalysisStorage {
         throw new Error("Could not get canvas context")
       }
 
-      // Calculate new dimensions (max width 1200px to reduce size)
-      const maxWidth = 1200
+      // Calculate new dimensions (max width 800px to reduce size further)
+      const maxWidth = 800
       const scale = Math.min(1, maxWidth / img.width)
       canvas.width = img.width * scale
       canvas.height = img.height * scale
@@ -66,8 +66,8 @@ class AnalysisStorage {
       // Draw and compress the image
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
 
-      // Convert to JPEG with 20% quality for ~80% size reduction
-      const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.2)
+      // Convert to JPEG with 10% quality for ~90% size reduction
+      const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.1)
 
       // Clean up
       URL.revokeObjectURL(img.src)
@@ -114,6 +114,34 @@ class AnalysisStorage {
       return true
     } catch {
       return false
+    }
+  }
+
+  private getStorageSize(): number {
+    try {
+      let totalSize = 0
+      for (let key in localStorage) {
+        if (localStorage.hasOwnProperty(key)) {
+          totalSize += localStorage[key].length + key.length
+        }
+      }
+      return totalSize
+    } catch {
+      return 0
+    }
+  }
+
+  private canStore(dataSize: number): boolean {
+    const storageLimit = 5 * 1024 * 1024 // 5MB approximate localStorage limit
+    const currentSize = this.getStorageSize()
+    return (currentSize + dataSize) < storageLimit * 0.8 // Keep 20% buffer
+  }
+
+  private getDataSize(data: any): number {
+    try {
+      return JSON.stringify(data).length
+    } catch {
+      return 0
     }
   }
 
@@ -168,7 +196,7 @@ class AnalysisStorage {
         timestamp: new Date(),
       })
 
-      this.updateAnalysis(analysisId, compressedData)
+      await this.updateAnalysis(analysisId, compressedData)
 
       if (process.env.NODE_ENV === "development") {
         console.log("💾 Analysis updated (preventing duplicate):", analysisId)
@@ -194,40 +222,77 @@ class AnalysisStorage {
         ...compressedMobileData,
       }
 
-      try {
-        const updated = [analysis, ...existing].slice(0, this.maxAnalyses)
-        localStorage.setItem(this.storageKey, JSON.stringify(updated))
-
-        if (process.env.NODE_ENV === "development") {
-          console.log("💾 New analysis saved with compressed images:", { id: analysisId, title, url })
-        }
-      } catch (error) {
-        console.error("Failed to save analysis:", error)
-        // If quota exceeded, try to clear old analyses and retry
-        if (error instanceof Error && error.name === 'QuotaExceededError') {
+      // Check storage capacity before saving
+      const updatedData = [analysis, ...existing].slice(0, this.maxAnalyses)
+      const dataSize = this.getDataSize(updatedData)
+      
+      if (!this.canStore(dataSize)) {
+        debugLogCategory("Analysis Storage", `Data too large (${Math.round(dataSize/1024)}KB), clearing old analyses`)
+        // Clear all old analyses and try with just the current one
+        const singleAnalysisData = [analysis]
+        const singleDataSize = this.getDataSize(singleAnalysisData)
+        
+        if (!this.canStore(singleDataSize)) {
+          // Try without screenshots as last resort
+          const analysisWithoutScreenshots = {
+            ...analysis,
+            desktopCaptureResult: analysis.desktopCaptureResult ? 
+              { ...analysis.desktopCaptureResult, screenshot: null } : null,
+            mobileCaptureResult: analysis.mobileCaptureResult ? 
+              { ...analysis.mobileCaptureResult, screenshot: null } : null,
+          }
+          
           try {
-            // Clear all analyses and try to save just the current one
             localStorage.removeItem(this.storageKey)
-            localStorage.setItem(this.storageKey, JSON.stringify([analysis]))
-            debugLogCategory("Analysis Storage", "Cleared old analyses due to quota limit, saved current analysis")
-          } catch (retryError) {
-            console.error("Failed to save analysis even after clearing:", retryError)
-            // Try to save without images as last resort
-            try {
-              const analysisWithoutImages = {
-                ...analysis,
-                desktopCaptureResult: analysis.desktopCaptureResult ? { ...analysis.desktopCaptureResult, image: null } : null,
-                mobileCaptureResult: analysis.mobileCaptureResult ? { ...analysis.mobileCaptureResult, image: null } : null,
-              }
-              localStorage.setItem(this.storageKey, JSON.stringify([analysisWithoutImages]))
-              debugLogCategory("Analysis Storage", "Saved analysis without images due to quota limit")
-            } catch (finalError) {
-              console.error("Failed to save analysis even without images:", finalError)
-              return ""
-            }
+            localStorage.setItem(this.storageKey, JSON.stringify([analysisWithoutScreenshots]))
+            debugLogCategory("Analysis Storage", "Saved analysis without screenshots due to storage constraints")
+          } catch (error) {
+            console.error("Failed to save even without screenshots:", error)
+            return ""
           }
         } else {
-          return ""
+          try {
+            localStorage.removeItem(this.storageKey)
+            localStorage.setItem(this.storageKey, JSON.stringify(singleAnalysisData))
+            debugLogCategory("Analysis Storage", "Cleared old analyses and saved current one")
+          } catch (error) {
+            console.error("Failed to save after clearing:", error)
+            return ""
+          }
+        }
+      } else {
+        try {
+          localStorage.setItem(this.storageKey, JSON.stringify(updatedData))
+          if (process.env.NODE_ENV === "development") {
+            console.log("💾 New analysis saved with compressed images:", { 
+              id: analysisId, 
+              title, 
+              url, 
+              size: `${Math.round(dataSize/1024)}KB` 
+            })
+          }
+        } catch (error) {
+          console.error("Failed to save analysis:", error)
+          // If quota exceeded despite our checks, fall back to aggressive clearing
+          if (error instanceof Error && error.name === 'QuotaExceededError') {
+            try {
+              localStorage.removeItem(this.storageKey)
+              const analysisWithoutScreenshots = {
+                ...analysis,
+                desktopCaptureResult: analysis.desktopCaptureResult ? 
+                  { ...analysis.desktopCaptureResult, screenshot: null } : null,
+                mobileCaptureResult: analysis.mobileCaptureResult ? 
+                  { ...analysis.mobileCaptureResult, screenshot: null } : null,
+              }
+              localStorage.setItem(this.storageKey, JSON.stringify([analysisWithoutScreenshots]))
+              debugLogCategory("Analysis Storage", "Emergency fallback: saved without screenshots")
+            } catch (finalError) {
+              console.error("Emergency fallback failed:", finalError)
+              return ""
+            }
+          } else {
+            return ""
+          }
         }
       }
     }
@@ -301,16 +366,39 @@ class AnalysisStorage {
 
         analyses[index] = { ...analyses[index], ...compressedUpdates, timestamp: new Date() }
         
-        try {
-          localStorage.setItem(this.storageKey, JSON.stringify(analyses))
-        } catch (error) {
-          if (error.name === 'QuotaExceededError') {
-            // Clear old analyses to free up space
-            const recentAnalyses = analyses.slice(-5) // Keep only last 5 analyses
+        const dataSize = this.getDataSize(analyses)
+        
+        if (!this.canStore(dataSize)) {
+          debugLogCategory("Analysis Storage", `Update too large (${Math.round(dataSize/1024)}KB), reducing data`)
+          // Keep only the most recent analysis
+          const recentAnalyses = analyses.slice(-1)
+          try {
             localStorage.setItem(this.storageKey, JSON.stringify(recentAnalyses))
-            console.warn("Storage quota exceeded, cleared old analyses and retried")
-          } else {
-            throw error
+            debugLogCategory("Analysis Storage", "Kept only most recent analysis due to size constraints")
+          } catch (error) {
+            console.error("Failed to save even reduced data:", error)
+            return
+          }
+        } else {
+          try {
+            localStorage.setItem(this.storageKey, JSON.stringify(analyses))
+          } catch (error) {
+            if (error instanceof Error && error.name === 'QuotaExceededError') {
+              // Emergency fallback: clear all and save only current analysis without screenshots
+              const currentAnalysis = analyses[index]
+              const analysisWithoutScreenshots = {
+                ...currentAnalysis,
+                desktopCaptureResult: currentAnalysis.desktopCaptureResult ? 
+                  { ...currentAnalysis.desktopCaptureResult, screenshot: null } : null,
+                mobileCaptureResult: currentAnalysis.mobileCaptureResult ? 
+                  { ...currentAnalysis.mobileCaptureResult, screenshot: null } : null,
+              }
+              localStorage.removeItem(this.storageKey)
+              localStorage.setItem(this.storageKey, JSON.stringify([analysisWithoutScreenshots]))
+              debugLogCategory("Analysis Storage", "Emergency update: saved without screenshots")
+            } else {
+              throw error
+            }
           }
         }
 

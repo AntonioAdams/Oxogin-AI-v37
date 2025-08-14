@@ -162,8 +162,8 @@ export default function EnhancedLoadingScreen({
   }, [desktopCaptureResult, mobileCaptureResult, url, websiteScreenshot])
 
   return (
-    <div className="min-h-screen bg-gray-50 p-2 sm:p-4 lg:p-6">
-      <div className="max-w-7xl mx-auto">
+    <div className="h-full bg-gray-50 p-2 sm:p-4 lg:p-6 compact-height ultra-compact landscape-mobile">
+      <div className="max-w-7xl mx-auto h-full flex flex-col">
         {/* Header - Responsive */}
         <div className="bg-blue-600 rounded-lg p-3 sm:p-4 lg:p-6 mb-3 sm:mb-4 lg:mb-6 text-white">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
@@ -188,14 +188,15 @@ export default function EnhancedLoadingScreen({
         </div>
 
         {/* Enhanced Progressive Loading Visualization */}
-        <Card className="w-full">
-          <CardHeader className="p-3 sm:p-4 lg:p-6">
-            <CardTitle className="flex items-center gap-2 text-lg sm:text-xl">
-              <Target className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
-              Live Prediction Analysis
+        <Card className="w-full flex-1 flex flex-col min-h-0">
+          <CardHeader className="card-header flex-shrink-0">
+            <CardTitle className="flex items-center gap-2 text-sm sm:text-lg">
+              <Target className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" />
+              <span className="hidden sm:inline">Live Prediction Analysis</span>
+              <span className="sm:hidden">Analysis</span>
             </CardTitle>
           </CardHeader>
-          <CardContent className="p-2 sm:p-4 lg:p-6">
+          <CardContent className="card-content flex-1 min-h-0">
             <div 
               className="relative bg-white rounded-xl border-2 border-blue-200 overflow-hidden" 
               style={{ height: isMobile ? "400px" : "600px" }}

@@ -288,12 +288,43 @@ export function CaptureDisplay({
       {/* Your Conversion Goal Section - Moved above Website Analysis */}
       {primaryCTAPrediction && updatedMatchedElement && (
         <Card className="bg-green-50 border border-green-200">
-          <CardContent className="p-4">
-                          <h3 className="font-semibold mb-4 flex items-center gap-2 text-gray-900">
-                <TrendingUp className="w-5 h-5 text-green-600" />
-                Your Click Prediction Is Ready
-              </h3>
-            <div className="flex items-center justify-between mb-3">
+          <CardContent className="p-3 sm:p-4 lg:p-6">
+            <h3 className="font-semibold mb-3 sm:mb-4 flex items-center gap-2 text-gray-900 text-sm sm:text-base">
+              <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 text-green-600" />
+              Your Click Prediction Is Ready
+            </h3>
+            
+            {/* Mobile Layout - Stack vertically */}
+            <div className="block sm:hidden space-y-4">
+              <div className="text-center">
+                <div className="text-xl font-bold text-blue-600">{formatPercentage(currentCTR)}</div>
+                <div className="text-xs text-gray-600">
+                  Current {updatedMatchedElement?.isFormRelated ? "Conversion" : "CTR"}
+                </div>
+              </div>
+              <div>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div
+                    className="bg-gradient-to-r from-blue-500 to-green-500 h-2 rounded-full transition-all duration-500"
+                    style={{
+                      width: `${(currentCTR / targetCTR) * 100}%`,
+                    }}
+                  ></div>
+                </div>
+                <div className="text-center mt-2 text-xs text-gray-600">
+                  {improvementPotential.toFixed(1)}% improvement needed
+                </div>
+              </div>
+              <div className="text-center">
+                <div className="text-xl font-bold text-green-600">{formatPercentage(targetCTR)}</div>
+                <div className="text-xs text-gray-600">
+                  Target {updatedMatchedElement?.isFormRelated ? "Conversion" : "CTR"}
+                </div>
+              </div>
+            </div>
+
+            {/* Desktop Layout - Horizontal */}
+            <div className="hidden sm:flex items-center justify-between mb-3">
               <div className="text-center">
                 <div className="text-2xl font-bold text-blue-600">{formatPercentage(currentCTR)}</div>
                 <div className="text-sm text-gray-600">
@@ -320,10 +351,17 @@ export function CaptureDisplay({
                 </div>
               </div>
             </div>
-            <div className="text-center">
-              <p className="text-sm text-gray-700">
-                Expand the Executive Brief below to see detailed recommendations for reaching your{" "}
-                <span className="font-semibold text-green-600">{formatPercentage(targetCTR)}</span> target
+            
+            <div className="text-center mt-3 sm:mt-0">
+              <p className="text-xs sm:text-sm text-gray-700">
+                <span className="hidden sm:inline">
+                  Expand the Executive Brief below to see detailed recommendations for reaching your{" "}
+                  <span className="font-semibold text-green-600">{formatPercentage(targetCTR)}</span> target
+                </span>
+                <span className="sm:hidden">
+                  See detailed recommendations below for your{" "}
+                  <span className="font-semibold text-green-600">{formatPercentage(targetCTR)}</span> target
+                </span>
               </p>
             </div>
           </CardContent>
@@ -332,28 +370,33 @@ export function CaptureDisplay({
 
       {/* Screenshot and Analysis */}
       <Card className="bg-white border border-gray-200">
-        <CardHeader className="pb-3">
+        <CardHeader className="pb-3 px-3 py-3 sm:px-6 sm:py-6">
           <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-lg text-gray-900">Website Analysis</CardTitle>
-              <CardDescription className="text-sm text-gray-600">
+            <div className="min-w-0 flex-1">
+              <CardTitle className="text-base sm:text-lg text-gray-900 truncate">
+                <span className="hidden sm:inline">Website Analysis</span>
+                <span className="sm:hidden">Analysis</span>
+              </CardTitle>
+              <CardDescription className="text-xs sm:text-sm text-gray-600 truncate">
                 {captureResult.domData?.title || "Website Screenshot"}
               </CardDescription>
             </div>
-
           </div>
         </CardHeader>
 
-        <CardContent className="space-y-4">
-          {/* Screenshot Container - Changed height from 1000px to 650px */}
-          <div className="relative bg-white border border-gray-200 rounded-lg overflow-auto" style={{ height: "650px" }}>
+        <CardContent className="space-y-4 p-3 sm:p-6">
+          {/* Screenshot Container - Responsive height and scrolling */}
+          <div className="relative bg-white border border-gray-200 rounded-lg overflow-auto h-96 sm:h-[500px] lg:h-[650px] max-h-[80vh]">
             <img
               ref={imageRef}
               src={captureResult.screenshot || "/placeholder.svg"}
               alt="Website Screenshot"
-              className="w-full h-auto"
+              className="w-full h-auto max-w-none min-w-[375px] sm:min-w-0"
               onLoad={handleImageLoad}
-              style={{ maxWidth: "100%", height: "auto" }}
+              style={{ 
+                maxWidth: "100%", 
+                height: "auto"
+              }}
             />
 
             {/* Form Boundary Boxes - Hide on mobile */}

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useCallback, useEffect, useRef } from "react"
-import { Target, FileDown, Eye, TrendingUp } from "lucide-react"
+import { Target, FileDown, Eye, TrendingUp, Zap } from "lucide-react"
 import Link from "next/link"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { processFormsForDisplay } from "@/lib/form"
@@ -1477,20 +1477,20 @@ export default function OxoginAI() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="h-screen bg-gray-50 flex flex-col overflow-hidden">
       {/* Mobile Header - Only visible on mobile */}
-      <div className="lg:hidden bg-white border-b border-gray-200 p-4 shadow-sm">
+      <div className="lg:hidden bg-white border-b border-gray-200 p-3 sm:p-4 shadow-sm flex-shrink-0">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
-              <Target className="w-4 h-4 text-white" />
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+              <Target className="w-3 h-3 sm:w-4 sm:h-4 text-white" />
             </div>
-            <span className="text-xl font-semibold text-gray-900">Oxogin AI</span>
+            <span className="text-lg sm:text-xl font-semibold text-gray-900">Oxogin AI</span>
           </div>
           <div className="flex items-center gap-2">
             <CreditDisplay />
             {user ? (
-              <div className="text-xs text-gray-600 truncate max-w-20">
+              <div className="text-xs text-gray-600 truncate max-w-16 sm:max-w-20">
                 {user.user_metadata?.full_name || user.email}
               </div>
             ) : (
@@ -1500,9 +1500,9 @@ export default function OxoginAI() {
         </div>
       </div>
 
-      <div className="flex">
+      <div className="flex flex-1 min-h-0">
         {/* Left Sidebar - Hidden on mobile, visible on desktop */}
-        <div className="hidden lg:flex w-80 bg-white border-r border-gray-200 p-8 flex-col shadow-sm">
+        <div className="hidden lg:flex w-80 bg-white border-r border-gray-200 p-6 xl:p-8 flex-col shadow-sm flex-shrink-0">
           {/* Logo */}
           <div className="flex items-center gap-4 mb-12">
             <div className="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center">
@@ -1600,48 +1600,86 @@ export default function OxoginAI() {
           </div>
         </div>
 
-        {/* Main Content - Responsive */}
-        <div className="flex-1 p-4 sm:p-6 overflow-auto">
-          {/* Header - Responsive */}
-          <div className="text-center space-y-2 sm:space-y-3 mb-4 sm:mb-6">
-            <div className="flex items-center justify-center gap-2 sm:gap-3">
-              <Target className="w-8 h-8 sm:w-10 sm:h-10 lg:w-12 lg:h-12 text-blue-600" />
-              <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-gray-900">Oxogin AI</h1>
-            </div>
-            <p className="text-base sm:text-lg lg:text-2xl text-gray-600 max-w-4xl mx-auto leading-relaxed px-4">
-              Enter a website URL to automatically capture and analyze the primary call-to-action for both desktop and
-              mobile
-            </p>
-
-            {/* Welcome message for authenticated users */}
-            {user && (
-              <p className="text-sm sm:text-base lg:text-lg text-blue-600 mt-2">
-                Welcome back, {user.user_metadata?.full_name || user.email}!
-              </p>
-            )}
-          </div>
-
-          {/* Mobile Current Analysis Info */}
-          {url && (
-            <div className="lg:hidden mb-4">
-              <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
-                <div className="text-sm text-gray-700 mb-1 font-medium">Current Analysis</div>
-                <div className="text-xs text-gray-600 break-all">{url}</div>
+        {/* Main Content - Responsive flex layout */}
+        <div className="flex-1 flex flex-col min-h-0 overflow-hidden" 
+             style={{ 
+               paddingBottom: 'env(safe-area-inset-bottom)', 
+               paddingTop: 'env(safe-area-inset-top)' 
+             }}>
+          
+          {/* Header Section - Ultra compact with badges */}
+          <div className="flex-shrink-0 compact-height ultra-compact landscape-mobile">
+            
+            {/* Top badges row - Hidden on very small screens */}
+            <div className="hidden sm:flex justify-center items-center gap-2 lg:gap-4 py-1 lg:py-2 hide-on-short">
+              <div className="flex items-center gap-1 bg-purple-50 border border-purple-200 rounded-md px-2 py-1">
+                <div className="w-4 h-4 bg-purple-100 rounded flex items-center justify-center">
+                  <Target className="w-2 h-2 text-purple-700" />
+                </div>
+                <div className="text-xs">
+                  <div className="font-semibold text-gray-900">#1 CRO AI</div>
+                  <div className="text-xs text-gray-600">Industry Leader</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-1 bg-blue-50 border border-blue-200 rounded-md px-2 py-1">
+                <div className="w-4 h-4 bg-blue-100 rounded flex items-center justify-center">
+                  <TrendingUp className="w-2 h-2 text-blue-700" />
+                </div>
+                <div className="text-xs">
+                  <div className="font-semibold text-gray-900">1,000+</div>
+                  <div className="text-xs text-gray-600">Daily Analyses</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-1 bg-orange-50 border border-orange-200 rounded-md px-2 py-1">
+                <div className="w-4 h-4 bg-orange-100 rounded flex items-center justify-center">
+                  <Zap className="w-2 h-2 text-orange-700" />
+                </div>
+                <div className="text-xs">
+                  <div className="font-semibold text-gray-900">Top 50</div>
+                  <div className="text-xs text-gray-600">AI Apps 2025</div>
+                </div>
               </div>
             </div>
-          )}
 
-          {/* URL Input - Keep existing but ensure it's responsive */}
-          <UrlInput
-            url={url}
-            setUrl={setUrl}
-            onCapture={captureWebsite}
-            isCapturing={isCapturing}
-            capturingDevice={capturingDevice}
-            disabled={false}
-          />
+            {/* Main title - Very compact */}
+            <div className="text-center py-1 sm:py-2">
+              <h1 className="text-xl sm:text-2xl lg:text-4xl font-bold text-gray-900 mb-1">
+                Predict Every <span className="text-blue-600">Click</span>
+              </h1>
+              <p className="text-xs sm:text-sm text-gray-600 hide-on-short">
+                <span className="hidden sm:inline">
+                  Instantly predict any page's conversion rate — no code, no spend, no wasted tests.
+                </span>
+                <span className="sm:hidden">
+                  Predict conversion rates instantly
+                </span>
+              </p>
+            </div>
 
-          {/* Main Content - Show Loading or Results */}
+            {/* URL Input - Always visible without scrolling */}
+            <UrlInput
+              url={url}
+              setUrl={setUrl}
+              onCapture={captureWebsite}
+              isCapturing={isCapturing}
+              capturingDevice={capturingDevice}
+              disabled={false}
+            />
+          </div>
+
+          {/* Scrollable Content Area */}
+          <div className="flex-1 overflow-auto p-3 sm:p-4 lg:p-6 pt-0">
+            {/* Mobile Current Analysis Info */}
+            {url && (
+              <div className="lg:hidden mb-4">
+                <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
+                  <div className="text-sm text-gray-700 mb-1 font-medium">Current Analysis</div>
+                  <div className="text-xs text-gray-600 break-all">{url}</div>
+                </div>
+              </div>
+            )}
+
+            {/* Main Content - Show Loading or Results */}
           {isFullAnalysisLoading ? (
             <EnhancedLoadingScreen
               loadingProgress={loadingProgress}
@@ -1657,26 +1695,36 @@ export default function OxoginAI() {
             // Show results only when not loading - Always render analysis content for PDF export
             (desktopCaptureResult || mobileCaptureResult) && (
               <>
-                {/* Tab Navigation - Move back to top */}
-                <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full mb-6">
-                  <TabsList className="grid w-full grid-cols-2 h-9">
-                    <TabsTrigger value="desktop" className="flex items-center gap-2 text-xs sm:text-sm">
-                      <Target className="w-3 h-3" />
-                      <span className="hidden sm:inline">Desktop Analysis</span>
-                      <span className="sm:hidden">Desktop</span>
+                {/* Tab Navigation - Mobile optimized */}
+                <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full mb-4 sm:mb-6">
+                  <TabsList className="grid w-full grid-cols-2 h-10 sm:h-11 p-1">
+                    <TabsTrigger 
+                      value="desktop" 
+                      className="flex items-center justify-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-4 py-1.5 sm:py-2"
+                    >
+                      <Target className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
+                      <span className="hidden xs:inline sm:hidden">Desk</span>
+                      <span className="hidden sm:inline">Desktop</span>
+                      <span className="xs:hidden">📱</span>
                       {desktopCaptureResult && (
-                        <Badge variant="secondary" className="ml-1 text-xs">
-                          Ready
+                        <Badge variant="secondary" className="ml-0.5 sm:ml-1 text-xs px-1 sm:px-2 py-0">
+                          <span className="hidden sm:inline">Ready</span>
+                          <span className="sm:hidden">✓</span>
                         </Badge>
                       )}
                     </TabsTrigger>
-                    <TabsTrigger value="mobile" className="flex items-center gap-2 text-xs sm:text-sm">
-                      <Target className="w-3 h-3" />
-                      <span className="hidden sm:inline">Mobile Analysis</span>
-                      <span className="sm:hidden">Mobile</span>
+                    <TabsTrigger 
+                      value="mobile" 
+                      className="flex items-center justify-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-4 py-1.5 sm:py-2"
+                    >
+                      <Target className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
+                      <span className="hidden xs:inline sm:hidden">Mob</span>
+                      <span className="hidden sm:inline">Mobile</span>
+                      <span className="xs:hidden">📱</span>
                       {mobileCaptureResult && (
-                        <Badge variant="secondary" className="ml-1 text-xs">
-                          Ready
+                        <Badge variant="secondary" className="ml-0.5 sm:ml-1 text-xs px-1 sm:px-2 py-0">
+                          <span className="hidden sm:inline">Ready</span>
+                          <span className="sm:hidden">✓</span>
                         </Badge>
                       )}
                     </TabsTrigger>
@@ -1787,15 +1835,18 @@ export default function OxoginAI() {
               </>
             )
           )}
+          </div>
         </div>
       </div>
       
-      {/* Floating Anchor Button */}
+      {/* Floating Anchor Button - More mobile-friendly positioning */}
       {(desktopAnalysisResult || mobileAnalysisResult || desktopOpenAIResult || mobileOpenAIResult) && (
-        <FloatingAnchorButton 
-          targetId="cro-results"
-          showScrollToTop={true}
-        />
+        <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-40">
+          <FloatingAnchorButton 
+            targetId="cro-results"
+            showScrollToTop={true}
+          />
+        </div>
       )}
       
       {/* Capture Notification */}
