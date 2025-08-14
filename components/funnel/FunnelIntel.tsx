@@ -34,16 +34,25 @@ export function FunnelIntel({ originalData, funnelData, onBack }: FunnelIntelPro
   const benchmarkScore = funnelAnalysis?.overallScore || 7.8
   const advantage = Math.round(((yourScore - benchmarkScore) / benchmarkScore) * 100)
 
-  // Real metrics with smart defaults to show funnel-specific performance
+  // Extract actual conversion rates from click prediction data
+  const getActualConversionRate = (data: any) => {
+    const primaryCTA = data?.primaryCTAPrediction || data?.clickPredictions?.[0]
+    return primaryCTA?.ctr ? (primaryCTA.ctr * 100) : 0
+  }
+
+  const yourConversionRate = getActualConversionRate(originalData) || 2.0
+  const benchmarkConversionRate = getActualConversionRate(funnelData) || 1.8
+
+  // Real metrics with actual conversion rates and smart defaults for other metrics
   const yourMetrics = {
-    conversionRate: 89,
+    conversionRate: yourConversionRate,
     funnelFlow: 82, 
     trustElements: 91,
     loadSpeed: 76 // This might need improvement
   }
 
   const benchmarkMetrics = {
-    conversionRate: funnelAnalysis?.metrics?.conversionRate || 72,
+    conversionRate: benchmarkConversionRate,
     funnelFlow: funnelAnalysis?.metrics?.funnelFlow || 79,
     trustElements: funnelAnalysis?.metrics?.trustElements || 68,
     loadSpeed: funnelAnalysis?.metrics?.loadSpeed || 87 // They might win here
@@ -102,8 +111,8 @@ export function FunnelIntel({ originalData, funnelData, onBack }: FunnelIntelPro
                 )}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent">
                   <div className="absolute bottom-2 left-2 text-white text-xs">
-                    <div className="font-bold">Score: {yourScore}/10</div>
-                    <div className="opacity-90">{originalData.captureResult?.domData?.buttons?.length || 7} CTAs • {originalData.captureResult?.domData?.links?.length || 9} Trust Elements</div>
+                    <div className="font-bold text-lg">{yourMetrics?.conversionRate && !isNaN(yourMetrics.conversionRate) ? yourMetrics.conversionRate.toFixed(1) : '0.0'}%</div>
+                    <div className="opacity-90">Final Conversion Rate</div>
                   </div>
                 </div>
               </div>
@@ -175,8 +184,8 @@ export function FunnelIntel({ originalData, funnelData, onBack }: FunnelIntelPro
                 )}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent">
                   <div className="absolute bottom-2 left-2 text-white text-xs">
-                    <div className="font-bold">Score: {benchmarkScore}/10</div>
-                    <div className="opacity-90">{funnelData.desktopCaptureResult?.domData?.buttons?.length || 5} CTAs • {funnelData.desktopCaptureResult?.domData?.links?.length || 6} Trust Elements</div>
+                    <div className="font-bold text-lg">{benchmarkMetrics?.conversionRate && !isNaN(benchmarkMetrics.conversionRate) ? benchmarkMetrics.conversionRate.toFixed(1) : '0.0'}%</div>
+                    <div className="opacity-90">Final Conversion Rate</div>
                   </div>
                 </div>
               </div>

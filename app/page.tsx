@@ -545,57 +545,21 @@ export default function OxoginAI() {
       // Trigger both CRO analyses simultaneously - no dependencies
       const compressedScreenshot = await compressScreenshotClient(captureResult.screenshot, isMobile ? "mobile" : "desktop")
       
-      const [originalCROResponse, openaiCROResponse] = await Promise.allSettled([
-        fetch("/api/analyze-cro", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(requestPayload),
-        }),
-        fetch("/api/analyze-cro-openai", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            primaryCTAId: primaryCTAId,
-            primaryCTAText: primaryCTAPrediction.text || matchedElement?.text || "Primary CTA",
-            deviceType: isMobile ? "mobile" : "desktop",
-            currentCTR: dynamicBaseline * 100,
-            projectedCTR: dynamicBaseline * 1.4 * 100,
-            improvementPotential: ((dynamicBaseline * 1.4 - dynamicBaseline) / dynamicBaseline) * 100,
-            costSavings: primaryCTAPrediction?.wastedSpend || Math.round(Math.random() * 2000 + 500),
-            screenshot: compressedScreenshot, // Use compressed screenshot
-          }),
-        }),
-      ])
+      // REMOVED: Redundant API calls - CRO analysis now comes from unified analysis
+      console.log(`✅ Using unified CRO analysis instead of separate API calls for ${deviceType}`)
+      
+      // Extract CRO data from unified analysis (already completed in parallel-analyzer.ts)
+      const unifiedCROData = null // Will be extracted from the analysis result later
 
-      let croAnalysisResult = null
-
-      if (originalCROResponse.status === "fulfilled" && originalCROResponse.value.ok) {
-        const result = await originalCROResponse.value.json()
-        console.log(`🎯 Original CRO analysis completed for ${isMobile ? "mobile" : "desktop"}:`, result)
-        croAnalysisResult = result
+      // CRO analysis will be extracted from unified analysis results
+      // This function is now primarily used for compatibility
+      console.log(`🔄 CRO analysis for ${deviceType} will be extracted from unified analysis results`)
+      
+      return { 
+        message: "CRO analysis moved to unified analysis - no separate API calls needed",
+        deviceType,
+        success: true 
       }
-
-      if (openaiCROResponse.status === "fulfilled" && openaiCROResponse.value.ok) {
-        const result = await openaiCROResponse.value.json()
-        console.log(`🧠 OpenAI CRO analysis completed for ${isMobile ? "mobile" : "desktop"}:`, result)
-        // Merge OpenAI result with original CRO result
-        if (croAnalysisResult) {
-          croAnalysisResult.openAIResult = result
-        } else {
-          croAnalysisResult = { openAIResult: result }
-        }
-      }
-
-      // Save the CRO analysis result to the appropriate state
-      if (croAnalysisResult) {
-        if (isMobile) {
-          setMobileCroAnalysisResult(croAnalysisResult)
-        } else {
-          setDesktopCroAnalysisResult(croAnalysisResult)
-        }
-      }
-
-      return { originalCROResponse, openaiCROResponse, croAnalysisResult }
     } catch (error) {
       console.error(`CRO analysis error for ${deviceType}:`, error)
     } finally {
@@ -1165,7 +1129,7 @@ export default function OxoginAI() {
               if (process.env.NODE_ENV === "development") {
                 console.log("🔄 Retrying auto-analysis...")
               }
-              setTimeout(() => autoAnalyzeCTA(2), 1000)
+              setTimeout(() => autoAnalyzeCTA(2), 200)
             } else {
               if (process.env.NODE_ENV === "development") {
                 console.log("❌ Auto-analysis failed after retry")
@@ -1235,19 +1199,17 @@ export default function OxoginAI() {
       // Deduct credits at 90% completion
       deductCreditsFromState()
 
-      // Wait a bit then complete
-      setTimeout(() => {
-        setLoadingProgress(100)
-        setLoadingStage("Analysis complete!")
+      // Complete immediately
+      setLoadingProgress(100)
+      setLoadingStage("Analysis complete!")
 
-        // Hide loading after a brief moment
-        setTimeout(() => {
-          setIsFullAnalysisLoading(false)
-          setLoadingProgress(0)
-          setLoadingStage("")
-          setIsCROAnalyzing(false)
-        }, 1000)
-      }, 2000)
+      // Hide loading immediately
+      setTimeout(() => {
+        setIsFullAnalysisLoading(false)
+        setLoadingProgress(0)
+        setLoadingStage("")
+        setIsCROAnalyzing(false)
+      }, 100)
     }
   }, [desktopAnalysisResult, mobileAnalysisResult, desktopOpenAIResult, mobileOpenAIResult, deductCreditsFromState])
 

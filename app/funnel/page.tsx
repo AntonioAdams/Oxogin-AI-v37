@@ -118,7 +118,7 @@ export default function FunnelPage() {
     setLoadingProgress(0)
     setLoadingStage("Initializing analysis...")
 
-    // Simulate main page analysis phases
+    // Quick progress updates without artificial delays
     const phases = [
       { progress: 25, stage: "Capturing website..." },
       { progress: 50, stage: "Analyzing page structure..." },
@@ -128,7 +128,7 @@ export default function FunnelPage() {
     ]
 
     for (const phase of phases) {
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      await new Promise(resolve => setTimeout(resolve, 100)) // Minimal delay for UI updates
       setLoadingProgress(phase.progress)
       setLoadingStage(phase.stage)
     }

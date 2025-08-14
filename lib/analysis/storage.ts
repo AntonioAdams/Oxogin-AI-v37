@@ -29,7 +29,7 @@ export interface SavedAnalysis {
 
 class AnalysisStorage {
   private storageKey = "cta-detector-analyses"
-  private maxAnalyses = 2 // Keep last 2 analyses to prevent quota issues with larger parallel data
+  private maxAnalyses = 1 // Keep only 1 analysis to prevent quota issues - aggressive storage optimization
   private saveTimeout: NodeJS.Timeout | null = null
 
   private async compressImage(blobUrl: string): Promise<string> {
@@ -82,27 +82,84 @@ class AnalysisStorage {
   private async compressAnalysisImages(data: any): Promise<any> {
     const compressed = { ...data }
 
-    try {
-      // Compress desktop screenshot
-      if (compressed.desktopCaptureResult?.screenshot) {
-        compressed.desktopCaptureResult = {
-          ...compressed.desktopCaptureResult,
-          screenshot: await this.compressImage(compressed.desktopCaptureResult.screenshot),
-        }
+    // AGGRESSIVE STORAGE OPTIMIZATION: Remove screenshots entirely to prevent quota issues
+    if (compressed.desktopCaptureResult?.screenshot) {
+      compressed.desktopCaptureResult = {
+        ...compressed.desktopCaptureResult,
+        screenshot: null, // Remove entirely to save massive space
       }
+    }
 
-      // Compress mobile screenshot
-      if (compressed.mobileCaptureResult?.screenshot) {
-        compressed.mobileCaptureResult = {
-          ...compressed.mobileCaptureResult,
-          screenshot: await this.compressImage(compressed.mobileCaptureResult.screenshot),
-        }
+    if (compressed.mobileCaptureResult?.screenshot) {
+      compressed.mobileCaptureResult = {
+        ...compressed.mobileCaptureResult,
+        screenshot: null, // Remove entirely to save massive space
       }
-    } catch (error) {
-      debugLogCategory("Analysis Storage", "Failed to compress analysis images:", error)
     }
 
     return compressed
+  }
+
+  // NEW: More aggressive data reduction for storage
+  private reduceAnalysisData(data: any): any {
+    const reduced = { ...data }
+
+    // Remove or minimize large objects that can cause quota issues
+    if (reduced.desktopCaptureResult) {
+      reduced.desktopCaptureResult = {
+        url: reduced.desktopCaptureResult.url,
+        imageSize: reduced.desktopCaptureResult.imageSize,
+        // Keep only essential domData - remove large arrays
+        domData: reduced.desktopCaptureResult.domData ? {
+          url: reduced.desktopCaptureResult.domData.url,
+          title: reduced.desktopCaptureResult.domData.title,
+          formFields: reduced.desktopCaptureResult.domData.formFields?.slice(0, 5) || [], // Keep max 5 form fields
+          elements: reduced.desktopCaptureResult.domData.elements?.slice(0, 20) || [], // Keep max 20 elements
+        } : null,
+        screenshot: null, // Always remove screenshots
+      }
+    }
+
+    if (reduced.mobileCaptureResult) {
+      reduced.mobileCaptureResult = {
+        url: reduced.mobileCaptureResult.url,
+        imageSize: reduced.mobileCaptureResult.imageSize,
+        // Keep only essential domData - remove large arrays
+        domData: reduced.mobileCaptureResult.domData ? {
+          url: reduced.mobileCaptureResult.domData.url,
+          title: reduced.mobileCaptureResult.domData.title,
+          formFields: reduced.mobileCaptureResult.domData.formFields?.slice(0, 5) || [], // Keep max 5 form fields
+          elements: reduced.mobileCaptureResult.domData.elements?.slice(0, 20) || [], // Keep max 20 elements
+        } : null,
+        screenshot: null, // Always remove screenshots
+      }
+    }
+
+    // Reduce debug data
+    if (reduced.desktopDebugMatches?.length > 10) {
+      reduced.desktopDebugMatches = reduced.desktopDebugMatches.slice(0, 10)
+    }
+    if (reduced.mobileDebugMatches?.length > 10) {
+      reduced.mobileDebugMatches = reduced.mobileDebugMatches.slice(0, 10)
+    }
+
+    // Reduce click predictions (keep top 10)
+    if (reduced.desktopClickPredictions?.length > 10) {
+      reduced.desktopClickPredictions = reduced.desktopClickPredictions.slice(0, 10)
+    }
+    if (reduced.mobileClickPredictions?.length > 10) {
+      reduced.mobileClickPredictions = reduced.mobileClickPredictions.slice(0, 10)
+    }
+
+    // Reduce form boundary boxes (keep top 5)
+    if (reduced.desktopFormBoundaryBoxes?.length > 5) {
+      reduced.desktopFormBoundaryBoxes = reduced.desktopFormBoundaryBoxes.slice(0, 5)
+    }
+    if (reduced.mobileFormBoundaryBoxes?.length > 5) {
+      reduced.mobileFormBoundaryBoxes = reduced.mobileFormBoundaryBoxes.slice(0, 5)
+    }
+
+    return reduced
   }
 
   private isStorageAvailable(): boolean {
@@ -189,14 +246,16 @@ class AnalysisStorage {
       // Update existing recent analysis instead of creating new one
       analysisId = recentAnalysis.id
 
-      // Compress images before updating
+      // Apply aggressive compression and data reduction before updating
       const compressedData = await this.compressAnalysisImages({
         ...desktopData,
         ...mobileData,
         timestamp: new Date(),
       })
+      
+      const reducedData = this.reduceAnalysisData(compressedData)
 
-      await this.updateAnalysis(analysisId, compressedData)
+      await this.updateAnalysis(analysisId, reducedData)
 
       if (process.env.NODE_ENV === "development") {
         console.log("💾 Analysis updated (preventing duplicate):", analysisId)
@@ -209,17 +268,22 @@ class AnalysisStorage {
         desktopData.desktopCaptureResult?.domData || mobileData.mobileCaptureResult?.domData,
       )
 
-      // Compress images before saving
+      // Apply aggressive data reduction and compression
       const compressedDesktopData = await this.compressAnalysisImages(desktopData)
       const compressedMobileData = await this.compressAnalysisImages(mobileData)
+      
+      // Apply additional data reduction to prevent quota issues
+      const reducedData = this.reduceAnalysisData({
+        ...compressedDesktopData,
+        ...compressedMobileData,
+      })
 
       const analysis: SavedAnalysis = {
         id: analysisId,
         url,
         title,
         timestamp: new Date(),
-        ...compressedDesktopData,
-        ...compressedMobileData,
+        ...reducedData,
       }
 
       // Check storage capacity before saving
@@ -361,10 +425,11 @@ class AnalysisStorage {
       const index = analyses.findIndex((analysis) => analysis.id === id)
 
       if (index !== -1) {
-        // Compress images in updates if they exist
+        // Apply aggressive compression and data reduction to updates
         const compressedUpdates = await this.compressAnalysisImages(updates)
+        const reducedUpdates = this.reduceAnalysisData(compressedUpdates)
 
-        analyses[index] = { ...analyses[index], ...compressedUpdates, timestamp: new Date() }
+        analyses[index] = { ...analyses[index], ...reducedUpdates, timestamp: new Date() }
         
         const dataSize = this.getDataSize(analyses)
         

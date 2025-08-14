@@ -87,6 +87,7 @@ export function CompetitorAnalysis({ originalData, competitorData, onCompetitorU
       totalWastedSpend: Math.round(totalWastedSpend), 
       totalWastedClicks: Math.round(totalWastedClicks),
       avgCTR: primaryCTR, // Direct from prediction engine - no rounding
+      currentCTR: primaryCTR, // ADDED: Current CTR for screenshot cards
       ctaCount,
       primaryCTAPerformance: primaryClickShare, // Direct from prediction engine - no rounding
       primaryCTR: primaryCTR, // Direct from prediction engine - no rounding
@@ -104,6 +105,7 @@ export function CompetitorAnalysis({ originalData, competitorData, onCompetitorU
       totalWastedSpend: 0,
       totalWastedClicks: 0,
       avgCTR: 0.02,
+      currentCTR: 0.02, // ADDED: Fallback current CTR for screenshot cards
       ctaCount: 0,
       primaryCTAPerformance: 0,
       primaryCTR: 0.02,
@@ -120,6 +122,7 @@ export function CompetitorAnalysis({ originalData, competitorData, onCompetitorU
       totalWastedSpend: 0,
       totalWastedClicks: 0,
       avgCTR: 0.02, // Same fallback as original
+      currentCTR: 0.02, // ADDED: Fallback current CTR for screenshot cards
       ctaCount: 0,
       primaryCTAPerformance: 0,
       primaryCTR: 0.02, // Same fallback as original
@@ -443,8 +446,8 @@ export function CompetitorAnalysis({ originalData, competitorData, onCompetitorU
                 )}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent">
                   <div className="absolute bottom-1 sm:bottom-2 left-1 sm:left-2 text-white text-xs">
-                    <div className="font-bold text-xs sm:text-sm">Score: {originalMetrics.overallScore}/10</div>
-                    <div className="opacity-90 text-xs">{originalMetrics.ctaCount} CTAs • ${originalMetrics.totalWastedSpend} wasted</div>
+                    <div className="font-bold text-sm sm:text-lg">{originalMetrics?.currentCTR && !isNaN(originalMetrics.currentCTR) ? (originalMetrics.currentCTR * 100).toFixed(1) : '0.0'}%</div>
+                    <div className="opacity-90 text-xs">Final Conversion Rate</div>
                   </div>
                 </div>
               </div>
@@ -512,8 +515,8 @@ export function CompetitorAnalysis({ originalData, competitorData, onCompetitorU
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent">
                     <div className="absolute bottom-1 sm:bottom-2 left-1 sm:left-2 text-white text-xs">
-                      <div className="font-bold text-xs sm:text-sm">Score: {competitorMetrics.overallScore}/10</div>
-                      <div className="opacity-90 text-xs">{competitorMetrics.ctaCount} CTAs • ${competitorMetrics.totalWastedSpend} wasted</div>
+                      <div className="font-bold text-sm sm:text-lg">{competitorMetrics?.currentCTR && !isNaN(competitorMetrics.currentCTR) ? (competitorMetrics.currentCTR * 100).toFixed(1) : '0.0'}%</div>
+                      <div className="opacity-90 text-xs">Final Conversion Rate</div>
                     </div>
                   </div>
                 </div>

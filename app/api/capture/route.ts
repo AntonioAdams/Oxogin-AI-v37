@@ -271,7 +271,8 @@ export async function POST(request: NextRequest) {
         primaryCTAPrediction: desktopAnalysis.primaryCTAPrediction,
         elements: desktopAnalysis.elements,
         analysisTime: desktopAnalysis.analysisTime,
-        deviceType: desktopAnalysis.deviceType
+        deviceType: desktopAnalysis.deviceType,
+        unifiedAnalysis: desktopAnalysis.unifiedAnalysis // Include unified analysis results
       },
       mobile: {
         captureResult: mobileResult,
@@ -280,8 +281,12 @@ export async function POST(request: NextRequest) {
         primaryCTAPrediction: mobileAnalysis.primaryCTAPrediction,
         elements: mobileAnalysis.elements,
         analysisTime: mobileAnalysis.analysisTime,
-        deviceType: mobileAnalysis.deviceType
+        deviceType: mobileAnalysis.deviceType,
+        unifiedAnalysis: mobileAnalysis.unifiedAnalysis // Include unified analysis results
       },
+      
+      // UNIFIED ANALYSIS: Single source of truth for CTA, CRO, and Competitor intel
+      unifiedAnalysis: desktopAnalysis.unifiedAnalysis || mobileAnalysis.unifiedAnalysis,
       
       // Metadata
       requestId,

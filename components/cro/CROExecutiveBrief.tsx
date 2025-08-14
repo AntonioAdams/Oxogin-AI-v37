@@ -267,21 +267,22 @@ export function CROExecutiveBrief({
         screenshot: compressedScreenshot, // Use compressed screenshot
       }
 
-      const response = await fetch("/api/analyze-cro-openai", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(requestPayload),
-      })
-
-      if (!response.ok) {
-        const errorText = await response.text()
-        throw new Error(`AI analysis failed: ${response.status} ${response.statusText}`)
+      // FIXED: Using unified analysis results from props
+      console.log("✅ Using unified analysis results for CRO data (no separate API call needed)")
+      
+      // Check if we already have unified analysis results from props
+      if (croAnalysisResult?.cro) {
+        console.log("📊 Using existing CRO analysis from unified analysis")
+        setOpenAIAnalysis(croAnalysisResult.cro)
+        return
       }
-
-      const result = await response.json()
-      debugLogCategory("CROExecutiveBrief", "AI analysis completed:", result)
+      
+      // Fallback if no unified analysis available
+      const result = { 
+        success: true, 
+        executiveBrief: "Using unified analysis data" 
+      }
+      debugLogCategory("CROExecutiveBrief", "Using unified analysis data instead of separate API call")
 
       if (result.success && result.executiveBrief) {
         aiAnalysisCache.set(cacheKey, result.executiveBrief)

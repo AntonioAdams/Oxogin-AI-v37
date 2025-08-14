@@ -733,10 +733,24 @@ export function WelcomeScreen({ onSkip }: WelcomeScreenProps) {
         if (isMobile) {
           setMobileCaptureResult(data)
           setCompletedSteps((prev) => ({ ...prev, mobileCapture: true }))
+          
+          // EXTRACT UNIFIED ANALYSIS DATA FOR MOBILE
+          if (data.unifiedAnalysis?.cro) {
+            console.log("📊 Setting mobile CRO analysis from unified analysis:", data.unifiedAnalysis.cro)
+            setMobileOpenAIResult(data.unifiedAnalysis.cro)
+            setMobileCroAnalysisResult(data.unifiedAnalysis)
+          }
         } else {
           setDesktopCaptureResult(data)
           setCompletedSteps((prev) => ({ ...prev, desktopCapture: true }))
           setActiveTab("desktop")
+          
+          // EXTRACT UNIFIED ANALYSIS DATA FOR DESKTOP
+          if (data.unifiedAnalysis?.cro) {
+            console.log("📊 Setting desktop CRO analysis from unified analysis:", data.unifiedAnalysis.cro)
+            setDesktopOpenAIResult(data.unifiedAnalysis.cro)
+            setDesktopCroAnalysisResult(data.unifiedAnalysis)
+          }
         }
 
         // Auto-analyze CTA after successful capture
@@ -786,60 +800,17 @@ export function WelcomeScreen({ onSkip }: WelcomeScreenProps) {
               getCurrentUserId()
             )
 
-            // STEP 1.5: Start background OpenAI CRO analysis immediately after click predictions
+            // REMOVED: Background OpenAI CRO analysis - now handled by unified analysis
+            // CRO analysis is included in the unified analysis for better efficiency and cost reduction
+            console.log(`✅ CRO analysis for ${isMobile ? "mobile" : "desktop"} will be provided by unified analysis`)
+            
             if (predictions && predictions.length > 0) {
-              const primaryPrediction = predictions[0] // First prediction is usually the primary CTA
-              
-              console.log(`🧠 Starting background OpenAI CRO analysis for ${isMobile ? "mobile" : "desktop"} at ${!isMobile ? "30%" : "65%"} loading`)
-              
-              // Start background OpenAI analysis without blocking the main flow
-              setTimeout(async () => {
-                try {
-                  const isFormRelated = data.domData?.formFields?.length > 0 || false
-                  const dynamicBaseline = primaryPrediction.ctr || 0.065
-
-                  // Compress screenshot before sending
-                  const compressedScreenshot = await compressScreenshotClient(data.screenshot, isMobile ? "mobile" : "desktop")
-
-                  const requestPayload = {
-                    primaryCTAId: primaryPrediction.elementId,
-                    primaryCTAText: primaryPrediction?.text || "Primary CTA",
-                    deviceType: isMobile ? "mobile" : "desktop",
-                    currentCTR: dynamicBaseline * 100,
-                    projectedCTR: dynamicBaseline * 1.4 * 100,
-                    improvementPotential: ((dynamicBaseline * 1.4 - dynamicBaseline) / dynamicBaseline) * 100,
-                    costSavings: primaryPrediction?.wastedSpend || Math.round(Math.random() * 2000 + 500),
-                    screenshot: compressedScreenshot, // Use compressed screenshot
-                  }
-
-                  console.log(`🧠 Sending OpenAI analysis request for ${isMobile ? "mobile" : "desktop"}:`, requestPayload)
-
-                  const response = await fetch("/api/analyze-cro-openai", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(requestPayload),
-                  })
-
-                  if (response.ok) {
-                    const result = await response.json()
-                    console.log(`🧠 Background OpenAI analysis completed for ${isMobile ? "mobile" : "desktop"}:`, result)
-
-                    // Store the OpenAI result
-                    if (isMobile) {
-                      setMobileOpenAIResult(result)
-                      setCompletedSteps((prev) => ({ ...prev, mobileOpenAI: true }))
-                    } else {
-                      setDesktopOpenAIResult(result)
-                      setCompletedSteps((prev) => ({ ...prev, desktopOpenAI: true }))
-                    }
-                  } else {
-                    const errorText = await response.text()
-                    console.error(`🧠 Background OpenAI analysis failed for ${isMobile ? "mobile" : "desktop"}:`, response.status, errorText)
-                  }
-                } catch (error) {
-                  console.error(`🧠 Background OpenAI analysis error for ${isMobile ? "mobile" : "desktop"}:`, error)
-                }
-              }, 1000) // Start after 1 second
+              // Mark OpenAI step as completed since it's included in unified analysis
+              if (isMobile) {
+                setCompletedSteps((prev) => ({ ...prev, mobileOpenAI: true }))
+              } else {
+                setCompletedSteps((prev) => ({ ...prev, desktopOpenAI: true }))
+              }
             }
 
             // STEP 2: Analyze CTA with AI
@@ -1020,7 +991,7 @@ export function WelcomeScreen({ onSkip }: WelcomeScreenProps) {
               if (process.env.NODE_ENV === "development") {
                 console.log("🔄 Retrying auto-analysis...")
               }
-              setTimeout(() => autoAnalyzeCTA(2), 1000)
+              setTimeout(() => autoAnalyzeCTA(2), 200)
             } else {
               if (process.env.NODE_ENV === "development") {
                 console.log("❌ Auto-analysis failed after retry")
@@ -1164,8 +1135,8 @@ export function WelcomeScreen({ onSkip }: WelcomeScreenProps) {
       setLoadingStage("Processing competitor website...")
       setLoadingProgress(30)
 
-      // Small delay to show progress
-      await new Promise(resolve => setTimeout(resolve, 200))
+      // Minimal delay to show progress
+      await new Promise(resolve => setTimeout(resolve, 50))
       
       setLoadingProgress(35)
 
@@ -1331,8 +1302,8 @@ export function WelcomeScreen({ onSkip }: WelcomeScreenProps) {
       setLoadingStage("Building competitor insights...")
       setLoadingProgress(90)
 
-      // Small delay to show progress
-      await new Promise(resolve => setTimeout(resolve, 300))
+      // Minimal delay to show progress
+      await new Promise(resolve => setTimeout(resolve, 50))
 
       setLoadingStage("Finalizing analysis...")
       setLoadingProgress(95)
@@ -1503,33 +1474,15 @@ export function WelcomeScreen({ onSkip }: WelcomeScreenProps) {
       setLoadingStage("Running CRO analysis...")
       setLoadingProgress(70)
       
-      const croResponse = await fetch('/api/analyze-cro', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          url: funnelUrl,
-          domData: captureResult.domData,
-          predictions: clickPredictions.predictions || [],
-          primaryCTAPrediction,
-          matchedElement: primaryCTAPrediction ? {
-            text: primaryCTAPrediction.text || primaryCTAPrediction.element,
-            isFormRelated: primaryCTAPrediction.isFormRelated || false,
-            coordinates: primaryCTAPrediction.coordinates
-          } : null,
-          allDOMElements: [
-            ...(captureResult.domData.buttons || []),
-            ...(captureResult.domData.links || []),
-            ...(captureResult.domData.forms || [])
-          ],
-          analysisMetadata: {
-            originalUrl: funnelUrl,
-            analysisTimestamp: new Date().toISOString()
-          }
-        })
-      })
-
-      const croAnalysisResult = croResponse.ok ? await croResponse.json() : null
-      console.log("⚡ Funnel CRO analysis completed")
+      // FIXED: Extract CRO analysis from unified analysis instead of separate API call
+      let croAnalysisResult = null
+      if (captureResult.unifiedAnalysis?.cro) {
+        console.log("📊 Using unified CRO analysis for funnel:", captureResult.unifiedAnalysis.cro)
+        croAnalysisResult = captureResult.unifiedAnalysis
+      } else {
+        console.log("⚠️ No unified CRO analysis found in capture result")
+      }
+      console.log("⚡ Funnel CRO analysis extracted from unified analysis")
 
       setLoadingStage("Finalizing analysis...")
       setLoadingProgress(95)
@@ -2577,14 +2530,14 @@ export function WelcomeScreen({ onSkip }: WelcomeScreenProps) {
           <div className="flex-1 flex flex-col items-center justify-center px-4 sm:px-8 lg:px-12 py-8 sm:py-12 lg:py-16 bg-gradient-to-b from-white to-gray-50">
             <div className="max-w-3xl w-full text-center">
               <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-gray-900 mb-4 lg:mb-6 leading-tight">
-                Predict Every{" "}
+              Transform Clicks into{" "}
                 <span className="bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                  Click
+                Conversions
                 </span>
               </h1>
 
               <p className="text-base sm:text-lg lg:text-xl text-gray-600 mb-8 sm:mb-12 lg:mb-16 leading-relaxed px-4">
-              Instantly predict any page’s conversion rate — no code, no spend, no wasted tests.
+              Paste a page link. We'll instantly predict any page’s conversion rate — no code, no spend, no wasted tests.
               </p>
 
               {/* Enhanced Input Area - Responsive */}

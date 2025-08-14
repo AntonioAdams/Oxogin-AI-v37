@@ -186,8 +186,8 @@ export default async function ({ page, context }) {
       console.log("Load timeout, continuing with DOM extraction");
     }
     
-    // Optimized buffer for dynamic content
-    await new Promise(resolve => setTimeout(resolve, 500));
+    // Minimal buffer for dynamic content
+    await new Promise(resolve => setTimeout(resolve, 200));
     
     console.log('Starting DOM extraction...');
     

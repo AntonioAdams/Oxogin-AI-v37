@@ -237,17 +237,17 @@ export default function EnhancedLoadingScreen({
                 </div>
               </div>
 
-              {/* Actual Screenshot Layer - Faster reveal */}
+              {/* Actual Screenshot Layer - IMMEDIATE reveal when screenshot available */}
               <div className={`absolute inset-0 transition-opacity duration-200 ${
                 websiteScreenshot ? 'opacity-100' : 'opacity-0'
               }`}>
-                {websiteScreenshot ? (
+                {websiteScreenshot && websiteScreenshot !== '/images/placeholder-screenshot.svg' ? (
                   <img 
                     src={websiteScreenshot} 
                     alt="Website Screenshot" 
                     className="w-full h-full object-cover object-top"
                     style={{
-                      clipPath: `inset(0 0 ${100 - Math.max(0, (loadingProgress - 5) * 2.5)}% 0)`
+                      clipPath: 'inset(0 0 0% 0)' // REMOVED artificial delay - show immediately when available
                     }}
                   />
                 ) : (

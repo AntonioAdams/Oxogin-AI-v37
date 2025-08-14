@@ -21,6 +21,7 @@ export interface AnalysisResult {
   elements: any[]
   analysisTime: number
   deviceType: 'desktop' | 'mobile'
+  unifiedAnalysis?: any // Include unified analysis results (contains CRO data)
 }
 
 /**
@@ -132,9 +133,10 @@ export async function analyzeCapture(
     }
 
     // Use unified analysis instead of individual CTA analysis
+    let unifiedResult = null
     try {
       if (captureResult.screenshot && captureResult.domData) {
-        const unifiedResult = await performUnifiedAnalysis({
+        unifiedResult = await performUnifiedAnalysis({
           screenshot: captureResult.screenshot,
           domData: captureResult.domData,
           deviceType: options.isMobile ? 'mobile' : 'desktop',
@@ -240,7 +242,8 @@ export async function analyzeCapture(
       primaryCTAPrediction,
       elements,
       analysisTime,
-      deviceType: options.isMobile ? 'mobile' : 'desktop'
+      deviceType: options.isMobile ? 'mobile' : 'desktop',
+      unifiedAnalysis: unifiedResult // Include unified analysis results (contains CRO data)
     }
 
   } catch (error) {

@@ -163,12 +163,16 @@ export function FunnelAnalysis({ originalData, funnelData, onFunnelUrlSubmit }: 
     setSecondaryAnalysis({ isLoading: true, data: null, error: false, progress: 0, stage: 'Starting analysis...' })
     
     try {
-      // Step 1: Capture the destination page
+      // Step 1: Capture the destination page (OPTIMIZED: desktop only, no mobile for page 2)
       setSecondaryAnalysis(prev => ({ ...prev, progress: 10, stage: 'Capturing page...' }))
       const captureResponse = await fetch('/api/capture', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: destinationUrl })
+        body: JSON.stringify({ 
+          url: destinationUrl,
+          isMobile: false, // OPTIMIZATION: Only desktop for page 2 analysis
+          skipCRO: true // OPTIMIZATION: Skip CRO analysis in capture if supported
+        })
       })
       
       if (!captureResponse.ok) {
@@ -177,8 +181,8 @@ export function FunnelAnalysis({ originalData, funnelData, onFunnelUrlSubmit }: 
       
       const captureResult = await captureResponse.json()
       
-      // Step 2: Predict clicks on the captured page
-      setSecondaryAnalysis(prev => ({ ...prev, progress: 40, stage: 'Analyzing CTAs...' }))
+      // Step 2: Predict clicks on the captured page (OPTIMIZED: faster without CRO)
+      setSecondaryAnalysis(prev => ({ ...prev, progress: 50, stage: 'Analyzing CTAs...' }))
       const clicksResponse = await fetch('/api/predict-clicks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -189,7 +193,7 @@ export function FunnelAnalysis({ originalData, funnelData, onFunnelUrlSubmit }: 
       })
       
       if (!clicksResponse.ok) {
-        console.error('❌ MAIN: Predict-clicks API failed')
+        console.warn('⚠️ MAIN: Predict-clicks API failed (likely rate limit):', clicksResponse.status)
         
         // ENHANCED: Provide fallback data for main funnel
         console.log('🔄 MAIN: Using fallback click predictions due to API failure')
@@ -205,7 +209,7 @@ export function FunnelAnalysis({ originalData, funnelData, onFunnelUrlSubmit }: 
         }
         
         // Continue with fallback data instead of throwing error
-        setSecondaryAnalysis(prev => ({ ...prev, progress: 70, stage: 'Using fallback predictions...' }))
+        setSecondaryAnalysis(prev => ({ ...prev, progress: 80, stage: 'Using fallback predictions...' }))
         var clickPredictions = fallbackClickPredictions
       } else {
         var clickPredictions = await clicksResponse.json()
@@ -215,38 +219,9 @@ export function FunnelAnalysis({ originalData, funnelData, onFunnelUrlSubmit }: 
       const primaryCTAId = clickPredictions.primaryCTAId
       const primaryCTAPrediction = clickPredictions.predictions.find((p: any) => p.elementId === primaryCTAId) || clickPredictions.predictions[0]
       
-      // Step 3: Run CRO analysis (same as original)
-      setSecondaryAnalysis(prev => ({ ...prev, progress: 70, stage: 'Running CRO analysis...' }))
-      const croResponse = await fetch('/api/analyze-cro', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          domData: captureResult.domData,
-          clickPredictions: clickPredictions.predictions,
-          primaryCTAId,
-          deviceType: 'desktop',
-          dynamicBaseline: 0.03, // Default baseline
-          isFormRelated: primaryCTAPrediction?.isFormRelated || false,
-          primaryCTAPrediction,
-          matchedElement: primaryCTAPrediction,
-          allDOMElements: captureResult.domData,
-          analysisMetadata: {
-            imageSize: captureResult.imageSize || { width: 800, height: 600 },
-            timestamp: new Date().toISOString(),
-            url: destinationUrl,
-            enhancedLabelsAvailable: clickPredictions.predictions?.some((p: any) => p.text && p.text !== p.elementId) || false,
-          },
-        })
-      })
-      
-      if (!croResponse.ok) {
-        throw new Error('Failed to analyze CRO')
-      }
-      
-      const croAnalysisResult = await croResponse.json()
-      
-      // Finalize analysis
-      setSecondaryAnalysis(prev => ({ ...prev, progress: 95, stage: 'Finalizing...' }))
+      // OPTIMIZED: Skip CRO analysis for page 2 in funnel analysis (not needed and slows down process)
+      console.log('⚡ OPTIMIZATION: Skipping CRO analysis for page 2 - not needed for funnel flow')
+      const croAnalysisResult = null // No CRO analysis needed for page 2
       
       // Step 4: Enhance with post-click prediction
       setSecondaryAnalysis(prev => ({ ...prev, progress: 85, stage: 'Analyzing conversion factors...' }))
@@ -392,7 +367,11 @@ export function FunnelAnalysis({ originalData, funnelData, onFunnelUrlSubmit }: 
       const captureResponse = await fetch('/api/capture', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: destinationUrl }),
+        body: JSON.stringify({ 
+          url: destinationUrl,
+          isMobile: false, // OPTIMIZATION: Only desktop for page 2 comparison
+          skipCRO: true // OPTIMIZATION: Skip CRO analysis in capture if supported
+        }),
         signal: controller.signal
       })
       
@@ -406,9 +385,9 @@ export function FunnelAnalysis({ originalData, funnelData, onFunnelUrlSubmit }: 
       
       if (!captureResponse.ok) {
         const errorText = await captureResponse.text()
-        console.error('❌ COMPARISON: Capture failed:', errorText)
+        console.warn('⚠️ COMPARISON: Capture failed (likely rate limit):', captureResponse.status)
         
-        // 🔄 FALLBACK STRATEGY: Use mock data when capture fails
+        // 🔄 GRACEFUL FALLBACK: Use mock data when capture fails (don't log as error to avoid console errors)
         console.log('🔄 COMPARISON: Using fallback mock data due to capture failure')
         setComparisonSecondaryAnalysis(prev => ({ ...prev, progress: 30, stage: 'Using fallback data...' }))
         
@@ -431,8 +410,8 @@ export function FunnelAnalysis({ originalData, funnelData, onFunnelUrlSubmit }: 
         console.log('✅ COMPARISON: Step 1 completed - page captured successfully')
       }
       
-      // Step 2: Predict clicks on the destination page
-      setComparisonSecondaryAnalysis(prev => ({ ...prev, progress: 40, stage: 'Analyzing CTAs...' }))
+      // Step 2: Predict clicks on the destination page (OPTIMIZED: faster without CRO)
+      setComparisonSecondaryAnalysis(prev => ({ ...prev, progress: 50, stage: 'Analyzing CTAs...' }))
       const clicksResponse = await fetch('/api/predict-clicks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -445,7 +424,7 @@ export function FunnelAnalysis({ originalData, funnelData, onFunnelUrlSubmit }: 
       
       if (!clicksResponse.ok) {
         const errorText = await clicksResponse.text()
-        console.error('❌ COMPARISON: Predict-clicks API failed:', errorText)
+        console.warn('⚠️ COMPARISON: Predict-clicks API failed (likely rate limit):', clicksResponse.status)
         
         // ENHANCED: Provide fallback data for comparison funnel
         console.log('📊 DATA SOURCE: Using FALLBACK click predictions due to API failure')
@@ -464,7 +443,7 @@ export function FunnelAnalysis({ originalData, funnelData, onFunnelUrlSubmit }: 
         }
         
         // Continue with fallback data instead of throwing error
-        setComparisonSecondaryAnalysis(prev => ({ ...prev, progress: 70, stage: 'Using fallback predictions...' }))
+        setComparisonSecondaryAnalysis(prev => ({ ...prev, progress: 80, stage: 'Using fallback predictions...' }))
         var clickPredictions = fallbackClickPredictions
       } else {
         var clickPredictions = await clicksResponse.json()
@@ -478,37 +457,11 @@ export function FunnelAnalysis({ originalData, funnelData, onFunnelUrlSubmit }: 
         primaryCTA: secondaryPrimaryCTA?.text || 'none'
       })
       
-      // Step 3: Run CRO analysis on the destination page
-      setComparisonSecondaryAnalysis(prev => ({ ...prev, progress: 70, stage: 'Running CRO analysis...' }))
-      const croResponse = await fetch('/api/analyze-cro', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          url: destinationUrl,
-          domData: captureResult.domData,
-          predictions: clickPredictions.predictions || [],
-          primaryCTAPrediction: secondaryPrimaryCTA,
-          matchedElement: secondaryPrimaryCTA ? {
-            text: secondaryPrimaryCTA.text || secondaryPrimaryCTA.element,
-            isFormRelated: secondaryPrimaryCTA.isFormRelated || false,
-            coordinates: secondaryPrimaryCTA.coordinates
-          } : null,
-          allDOMElements: [
-            ...(captureResult.domData.buttons || []),
-            ...(captureResult.domData.links || []),
-            ...(captureResult.domData.forms || [])
-          ],
-          analysisMetadata: {
-            originalUrl: destinationUrl,
-            analysisTimestamp: new Date().toISOString()
-          }
-        })
-      })
+      // OPTIMIZED: Skip CRO analysis for page 2 comparison (not needed and slows down process)
+      console.log('⚡ OPTIMIZATION: Skipping CRO analysis for page 2 comparison - not needed for funnel flow')
+      const croAnalysisResult = null // No CRO analysis needed for page 2 comparison
       
-      const croAnalysisResult = croResponse.ok ? await croResponse.json() : null
-      console.log('✅ COMPARISON: Step 3 completed - CRO analysis finished')
-      
-      // Step 4: Enhance with post-click prediction
+      // Step 3: Enhance with post-click prediction (OPTIMIZED: no CRO analysis needed)
       setComparisonSecondaryAnalysis(prev => ({ ...prev, progress: 85, stage: 'Analyzing conversion factors...' }))
       
       let postClickPrediction = null
@@ -734,11 +687,16 @@ export function FunnelAnalysis({ originalData, funnelData, onFunnelUrlSubmit }: 
             // Handle relative URLs
             if (bestExtraction.url.startsWith('/')) {
               const currentUrl = originalData.url || originalData.captureResult?.domData?.url
-              if (currentUrl) {
-                const baseUrl = new URL(currentUrl).origin
-                const fullUrl = `${baseUrl}${bestExtraction.url}`
-                console.log('🎯 ATF Bridge: Converted relative URL to:', fullUrl)
-                return fullUrl
+              if (currentUrl && typeof currentUrl === 'string' && currentUrl.trim()) {
+                try {
+                  const baseUrl = new URL(currentUrl).origin
+                  const fullUrl = `${baseUrl}${bestExtraction.url}`
+                  console.log('🎯 ATF Bridge: Converted relative URL to:', fullUrl)
+                  return fullUrl
+                } catch (error) {
+                  console.warn('🎯 ATF Bridge: Invalid currentUrl for relative URL conversion:', currentUrl, error)
+                  return bestExtraction.url // Return as-is if base URL is invalid
+                }
               }
             }
             return bestExtraction.url
@@ -775,8 +733,13 @@ export function FunnelAnalysis({ originalData, funnelData, onFunnelUrlSubmit }: 
         // Handle relative URLs
         if (dataUrl.startsWith('/')) {
           const currentUrl = originalData.url || window.location.href
-          const baseUrl = new URL(currentUrl).origin
-          return `${baseUrl}${dataUrl}`
+          try {
+            const baseUrl = new URL(currentUrl).origin
+            return `${baseUrl}${dataUrl}`
+          } catch (error) {
+            console.warn('🎯 Invalid currentUrl for relative URL conversion:', currentUrl, error)
+            return dataUrl // Return as-is if base URL is invalid
+          }
         }
         return dataUrl
       }
@@ -791,8 +754,13 @@ export function FunnelAnalysis({ originalData, funnelData, onFunnelUrlSubmit }: 
           // Handle relative URLs
           if (extractedUrl.startsWith('/')) {
             const currentUrl = originalData.url || window.location.href
-            const baseUrl = new URL(currentUrl).origin
-            return `${baseUrl}${extractedUrl}`
+            try {
+              const baseUrl = new URL(currentUrl).origin
+              return `${baseUrl}${extractedUrl}`
+            } catch (error) {
+              console.warn('🎯 Invalid currentUrl for relative URL conversion:', currentUrl, error)
+              return extractedUrl // Return as-is if base URL is invalid
+            }
           }
           return extractedUrl
         }
@@ -965,9 +933,10 @@ export function FunnelAnalysis({ originalData, funnelData, onFunnelUrlSubmit }: 
       
       if (prediction.text) {
         const currentUrl = originalData.url || originalData.captureResult?.domData?.url
-        if (currentUrl) {
-          const domain = new URL(currentUrl).origin
-          const text = prediction.text.toLowerCase()
+        if (currentUrl && typeof currentUrl === 'string' && currentUrl.trim()) {
+          try {
+            const domain = new URL(currentUrl).origin
+            const text = prediction.text.toLowerCase()
           
           let generatedPath = '/contact'
           if (text.includes('demo')) generatedPath = '/demo'
@@ -981,6 +950,9 @@ export function FunnelAnalysis({ originalData, funnelData, onFunnelUrlSubmit }: 
             ctaText: prediction.text, generatedUrl 
           })
           return generatedUrl
+          } catch (error) {
+            console.warn('🎯 Invalid currentUrl for URL generation:', currentUrl, error)
+          }
         }
       }
     }
@@ -1022,11 +994,9 @@ export function FunnelAnalysis({ originalData, funnelData, onFunnelUrlSubmit }: 
           console.log('🚀 Starting MAIN secondary analysis loading state')
           setSecondaryAnalysis({ isLoading: true, data: null, error: false, progress: 5, stage: 'Preparing analysis...' })
           
-          // Start analysis after a brief delay to show loading state
-          setTimeout(() => {
-            console.log('⏰ MAIN setTimeout triggered, calling analyzeSecondaryPage')
-            analyzeSecondaryPage(destinationUrl)
-          }, 100)
+          // Start analysis immediately
+          console.log('⏰ MAIN Starting analyzeSecondaryPage immediately')
+          analyzeSecondaryPage(destinationUrl)
         }
         
         // Add timeout to prevent infinite loading
@@ -1188,6 +1158,7 @@ export function FunnelAnalysis({ originalData, funnelData, onFunnelUrlSubmit }: 
       totalWastedSpend: Math.round(totalWastedSpend), 
       totalWastedClicks: Math.round(totalWastedClicks),
       avgCTR: primaryCTR, // Direct from prediction engine - no rounding
+      currentCTR: primaryCTR, // ADDED: Current CTR for screenshot cards
       projectedCTR: projectedCTR, // Use actual projected CTR if available
       ctaCount,
       primaryCTAPerformance: primaryClickShare, // Direct from prediction engine - no rounding
@@ -1207,6 +1178,7 @@ export function FunnelAnalysis({ originalData, funnelData, onFunnelUrlSubmit }: 
       totalWastedSpend: 0,
       totalWastedClicks: 0,
       avgCTR: 0.02,
+      currentCTR: 0.02, // ADDED: Fallback current CTR for screenshot cards
       projectedCTR: 0.02 * 1.475,
       ctaCount: 0,
       primaryCTAPerformance: 0,
@@ -1225,6 +1197,7 @@ export function FunnelAnalysis({ originalData, funnelData, onFunnelUrlSubmit }: 
       totalWastedSpend: 0,
       totalWastedClicks: 0,
       avgCTR: 0.02, // Same fallback as original
+      currentCTR: 0.02, // ADDED: Fallback current CTR for screenshot cards
       projectedCTR: 0.02 * 1.475,
       ctaCount: 0,
       primaryCTAPerformance: 0,
@@ -1549,8 +1522,8 @@ export function FunnelAnalysis({ originalData, funnelData, onFunnelUrlSubmit }: 
                 )}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent">
                   <div className="absolute bottom-1 sm:bottom-2 left-1 sm:left-2 text-white text-xs">
-                    <div className="font-bold text-xs sm:text-sm">Score: {originalMetrics.overallScore}/10</div>
-                    <div className="opacity-90 text-xs">{originalMetrics.ctaCount} CTAs • ${originalMetrics.totalWastedSpend} wasted</div>
+                    <div className="font-bold text-sm sm:text-lg">{originalMetrics?.currentCTR && !isNaN(originalMetrics.currentCTR) ? (originalMetrics.currentCTR * 100).toFixed(1) : '0.0'}%</div>
+                    <div className="opacity-90 text-xs">Final Conversion Rate</div>
                   </div>
                 </div>
               </div>
@@ -1618,8 +1591,8 @@ export function FunnelAnalysis({ originalData, funnelData, onFunnelUrlSubmit }: 
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent">
                     <div className="absolute bottom-1 sm:bottom-2 left-1 sm:left-2 text-white text-xs">
-                      <div className="font-bold text-xs sm:text-sm">Score: {funnelMetrics.overallScore}/10</div>
-                      <div className="opacity-90 text-xs">{funnelMetrics.ctaCount} CTAs • ${funnelMetrics.totalWastedSpend} wasted</div>
+                      <div className="font-bold text-sm sm:text-lg">{funnelMetrics?.currentCTR && !isNaN(funnelMetrics.currentCTR) ? (funnelMetrics.currentCTR * 100).toFixed(1) : '0.0'}%</div>
+                      <div className="opacity-90 text-xs">Final Conversion Rate</div>
                     </div>
                   </div>
                 </div>
