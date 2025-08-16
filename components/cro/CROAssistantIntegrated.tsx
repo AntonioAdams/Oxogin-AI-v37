@@ -40,7 +40,14 @@ export function CROAssistantIntegrated({
   openAIResult, // Add OpenAI result
   croAnalysisResult, // Add CRO analysis result
 }: CROAssistantIntegratedProps) {
-
+  // 🔍 DEBUG: CROAssistantIntegrated - trace CRO data
+  console.log("🔍 CROAssistantIntegrated - CRO Data Trace:")
+  console.log("  croAnalysisResult:", !!croAnalysisResult)
+  console.log("  croKeys:", croAnalysisResult ? Object.keys(croAnalysisResult) : 'null')
+  console.log("  recommendations:", !!croAnalysisResult?.recommendations)
+  console.log("  recCount:", croAnalysisResult?.recommendations?.length || 0)
+  console.log("  preLoadedAnalysis:", preLoadedAnalysis)
+  console.log("  RAW croAnalysisResult:", croAnalysisResult)
   
   const [isExpanded, setIsExpanded] = useState(false)
 
@@ -80,7 +87,14 @@ export function CROAssistantIntegrated({
 
   // Auto-expand when analysis is pre-loaded or CRO data is available
   useEffect(() => {
-
+    console.log("🔍 CROAssistantIntegrated Auto-expansion check:", {
+      preLoadedAnalysis,
+      hasPrimaryCTAPrediction: !!primaryCTAPrediction,
+      hasMatchedElement: !!matchedElement,
+      hasCroAnalysisResult: !!croAnalysisResult,
+      croRecommendationsCount: croAnalysisResult?.recommendations?.length || 0,
+      currentlyExpanded: isExpanded
+    })
     
     if (preLoadedAnalysis && primaryCTAPrediction && matchedElement) {
       console.log("✅ Auto-expanding due to pre-loaded analysis with full CTA data")

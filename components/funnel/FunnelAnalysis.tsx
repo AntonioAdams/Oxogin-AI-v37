@@ -67,22 +67,30 @@ export function FunnelAnalysis({ originalData, funnelData, onFunnelUrlSubmit }: 
   // Use frozen data if available, prevents ALL parent-triggered changes
   const stableOriginalData = frozenOriginalData || originalData
   
-  // Debug logging for form detection
+  // Debug logging for form detection with error safety
   useEffect(() => {
-    console.log('🐛 FunnelAnalysis Debug - stableOriginalData.primaryCTAPrediction:', {
-      text: stableOriginalData.primaryCTAPrediction?.text,
-      elementId: stableOriginalData.primaryCTAPrediction?.elementId,
-      isFormRelated: stableOriginalData.primaryCTAPrediction?.isFormRelated,
-      fullObject: stableOriginalData.primaryCTAPrediction,
-      frozen: stableOriginalData.frozen
-    })
-    console.log('🐛 FunnelAnalysis Debug - funnelData.primaryCTAPrediction:', {
-      text: funnelData?.primaryCTAPrediction?.text,
-      elementId: funnelData?.primaryCTAPrediction?.elementId,
-      isFormRelated: funnelData?.primaryCTAPrediction?.isFormRelated,
-      fullObject: funnelData?.primaryCTAPrediction
-    })
-  }, [stableOriginalData.primaryCTAPrediction?.elementId, funnelData?.primaryCTAPrediction?.elementId]) // STABLE: Using frozen data prevents interference
+    try {
+      // Safely access properties with null checks
+      const originalCTA = stableOriginalData?.primaryCTAPrediction
+      const funnelCTA = funnelData?.primaryCTAPrediction
+      
+      console.log('🐛 FunnelAnalysis Debug - stableOriginalData.primaryCTAPrediction:', {
+        text: originalCTA?.text || 'N/A',
+        elementId: originalCTA?.elementId || 'N/A',
+        isFormRelated: originalCTA?.isFormRelated || false,
+        hasFullObject: !!originalCTA,
+        frozen: stableOriginalData?.frozen || false
+      })
+      console.log('🐛 FunnelAnalysis Debug - funnelData.primaryCTAPrediction:', {
+        text: funnelCTA?.text || 'N/A',
+        elementId: funnelCTA?.elementId || 'N/A',
+        isFormRelated: funnelCTA?.isFormRelated || false,
+        hasFullObject: !!funnelCTA
+      })
+    } catch (error) {
+      console.warn('🐛 FunnelAnalysis Debug - Error in debug logging:', error)
+    }
+  }, [stableOriginalData?.primaryCTAPrediction?.elementId, funnelData?.primaryCTAPrediction?.elementId]) // STABLE: Using frozen data prevents interference
   
   // Secondary analysis state for non-form CTAs - Your Site Funnel
   const [secondaryAnalysis, setSecondaryAnalysis] = useState<{
@@ -125,27 +133,31 @@ export function FunnelAnalysis({ originalData, funnelData, onFunnelUrlSubmit }: 
     }
   }, [funnelData?.url])
 
-  // RESTORE main funnel state immediately and robustly
+  // RESTORE main funnel state immediately and robustly with error safety
   useEffect(() => {
-    if (preservedMainFunnelState) {
-      // Restore main funnel if it gets lost OR if comparison starts
-      const shouldRestore = 
-        (!secondaryAnalysis.data && !secondaryAnalysis.isLoading) || // Lost main data
-        comparisonSecondaryAnalysis.isLoading || // Comparison is running
-        comparisonSecondaryAnalysis.data || // Comparison completed
-        comparisonSecondaryAnalysis.error // Comparison failed
-      
-      if (shouldRestore && preservedMainFunnelState.secondaryAnalysis.data) {
-        console.log('🔄 Robustly restoring main funnel state:', {
-          trigger: comparisonSecondaryAnalysis.isLoading ? 'comparison running' :
-                  comparisonSecondaryAnalysis.data ? 'comparison completed' :
-                  comparisonSecondaryAnalysis.error ? 'comparison failed' : 'main data lost',
-          preservedData: !!preservedMainFunnelState.secondaryAnalysis.data
-        })
-        setSecondaryAnalysis(preservedMainFunnelState.secondaryAnalysis)
+    try {
+      if (preservedMainFunnelState?.secondaryAnalysis) {
+        // Restore main funnel if it gets lost OR if comparison starts
+        const shouldRestore = 
+          (!secondaryAnalysis?.data && !secondaryAnalysis?.isLoading) || // Lost main data
+          comparisonSecondaryAnalysis?.isLoading || // Comparison is running
+          comparisonSecondaryAnalysis?.data || // Comparison completed
+          comparisonSecondaryAnalysis?.error // Comparison failed
+        
+        if (shouldRestore && preservedMainFunnelState.secondaryAnalysis.data) {
+          console.log('🔄 Robustly restoring main funnel state:', {
+            trigger: comparisonSecondaryAnalysis?.isLoading ? 'comparison running' :
+                    comparisonSecondaryAnalysis?.data ? 'comparison completed' :
+                    comparisonSecondaryAnalysis?.error ? 'comparison failed' : 'main data lost',
+            preservedData: !!preservedMainFunnelState.secondaryAnalysis.data
+          })
+          setSecondaryAnalysis(preservedMainFunnelState.secondaryAnalysis)
+        }
       }
+    } catch (error) {
+      console.error('🔄 Error in main funnel state restoration:', error)
     }
-  }, [preservedMainFunnelState, comparisonSecondaryAnalysis.isLoading, comparisonSecondaryAnalysis.data, comparisonSecondaryAnalysis.error])
+  }, [preservedMainFunnelState?.secondaryAnalysis?.data, comparisonSecondaryAnalysis?.isLoading, comparisonSecondaryAnalysis?.data, comparisonSecondaryAnalysis?.error])
 
   // COMPLETELY ISOLATE main and comparison analysis flows
   const shouldSkipMainAnalysis = comparisonSecondaryAnalysis.isLoading || comparisonSecondaryAnalysis.data
@@ -1825,7 +1837,16 @@ export function FunnelAnalysis({ originalData, funnelData, onFunnelUrlSubmit }: 
                 )}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent">
                   <div className="absolute bottom-1 sm:bottom-2 left-1 sm:left-2 text-white text-xs">
-                    <div className="font-bold text-sm sm:text-lg">{originalMetrics?.currentCTR && !isNaN(originalMetrics.currentCTR) ? (originalMetrics.currentCTR * 100).toFixed(1) : '0.0'}%</div>
+                    <div className="font-bold text-sm sm:text-lg">
+                      {(() => {
+                        let finalRate = originalMetrics.avgCTR
+                        // For non-form CTAs, multiply by secondary conversion rate (same calculation as bottom)
+                        if (!originalData.primaryCTAPrediction?.isFormRelated && secondaryAnalysis.data?.primaryCTAPrediction?.ctr) {
+                          finalRate = originalMetrics.avgCTR * secondaryAnalysis.data.primaryCTAPrediction.ctr
+                        }
+                        return (finalRate * 100).toFixed(1)
+                      })()}%
+                    </div>
                     <div className="opacity-90 text-xs">Final Conversion Rate</div>
                   </div>
                 </div>
@@ -1894,7 +1915,22 @@ export function FunnelAnalysis({ originalData, funnelData, onFunnelUrlSubmit }: 
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent">
                     <div className="absolute bottom-1 sm:bottom-2 left-1 sm:left-2 text-white text-xs">
-                      <div className="font-bold text-sm sm:text-lg">{funnelMetrics?.currentCTR && !isNaN(funnelMetrics.currentCTR) ? (funnelMetrics.currentCTR * 100).toFixed(1) : '0.0'}%</div>
+                      <div className="font-bold text-sm sm:text-lg">
+                        {(() => {
+                          // Use EXACT same calculation as funnel area below
+                          const isFormCTA = funnelData.primaryCTAPrediction?.isFormRelated
+                          if (isFormCTA) {
+                            // Two-step: Page 1 CTR × form completion rate (70%)
+                            return (funnelMetrics.avgCTR * 0.7 * 100).toFixed(1)
+                          } else if (comparisonSecondaryAnalysis.data?.primaryCTAPrediction?.ctr) {
+                            // Three-step: Page 1 CTR × Page 2 CTR
+                            return (funnelMetrics.avgCTR * comparisonSecondaryAnalysis.data.primaryCTAPrediction.ctr * 100).toFixed(1)
+                          } else {
+                            // Fallback to Page 1 CTR if no secondary data
+                            return (funnelMetrics.avgCTR * 100).toFixed(1)
+                          }
+                        })()}%
+                      </div>
                       <div className="opacity-90 text-xs">Final Conversion Rate</div>
                     </div>
                   </div>

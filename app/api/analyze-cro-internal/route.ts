@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
 
         // For backward compatibility with existing UI
         currentPerformance: {
-          primaryCTA: analysisResult.tokens.labels.primary_cta || "Main CTA",
+          primaryCTA: requestBody.primaryCTAPrediction?.text || analysisResult.tokens.labels.primary_cta || "Main CTA",
           currentConversionRate: 2.3, // Default baseline
           projectedConversionRate: 2.3 + (analysisResult.summary.estimatedUpliftRange.min / 100 * 2.3),
           monthlyWastedSpend: 0, // Calculate if needed

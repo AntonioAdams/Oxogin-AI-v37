@@ -543,7 +543,7 @@ export class CPCEstimator {
    */
   private static detectBusinessType(context: Partial<PageContext>): "b2b" | "b2c" | "unknown" {
     // Industry-based detection
-    const b2bIndustries = ["saas", "technology", "legal", "finance", "leadgen"]
+    const b2bIndustries = ["saas", "technology", "legal", "finance", "leadgen", "healthcare"]
     const b2cIndustries = ["ecommerce", "travel", "consumerservices"]
 
     if (context.industry) {
@@ -651,7 +651,7 @@ export class CPCEstimator {
    * Estimate competition level
    */
   private static estimateCompetitionLevel(context: Partial<PageContext>): "high" | "medium" | "low" | "unknown" {
-    const highCompetitionIndustries = ["legal", "finance", "consumerservices", "saas"]
+    const highCompetitionIndustries = ["legal", "finance", "consumerservices", "saas", "healthcare"]
     const mediumCompetitionIndustries = ["technology", "automotive", "realestate"]
     const lowCompetitionIndustries = ["content", "travel"]
 

@@ -247,6 +247,12 @@ export const INDUSTRY_MODIFIERS = {
     bounceRateAdjustment: -0.05,
     avgCPC: 2.4, // Education (2025 data)
   },
+  healthcare: {
+    formCompletionRate: 0.78,
+    ctaClickRate: 1.15,
+    bounceRateAdjustment: 0.02,
+    avgCPC: 4.8, // Healthcare/Medical (2025 data) - higher due to compliance/trust requirements
+  },
 } as const
 
 // Updated CPC calculation constants with 2025 data

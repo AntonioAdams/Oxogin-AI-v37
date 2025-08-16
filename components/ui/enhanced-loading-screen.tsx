@@ -53,16 +53,16 @@ export default function EnhancedLoadingScreen({
   
   // Detailed step tracking
   const [detailedSteps, setDetailedSteps] = useState<DetailedStep[]>([
-    { id: 'init', label: 'Initializing Analysis', progress: 0, status: 'pending', deviceType: 'both' },
-    { id: 'desktop_capture', label: 'Desktop Screenshot', progress: 0, status: 'pending', deviceType: 'desktop' },
-    { id: 'mobile_capture', label: 'Mobile Screenshot', progress: 0, status: 'pending', deviceType: 'mobile' },
-    { id: 'desktop_elements', label: 'Desktop Elements', progress: 0, status: 'pending', deviceType: 'desktop' },
-    { id: 'mobile_elements', label: 'Mobile Elements', progress: 0, status: 'pending', deviceType: 'mobile' },
-    { id: 'desktop_ai', label: 'Desktop AI Analysis', progress: 0, status: 'pending', deviceType: 'desktop' },
-    { id: 'mobile_ai', label: 'Mobile AI Analysis', progress: 0, status: 'pending', deviceType: 'mobile' },
-    { id: 'desktop_cro', label: 'Desktop CRO Analysis', progress: 0, status: 'pending', deviceType: 'desktop' },
-    { id: 'mobile_cro', label: 'Mobile CRO Analysis', progress: 0, status: 'pending', deviceType: 'mobile' },
-    { id: 'finalize', label: 'Finalizing Results', progress: 0, status: 'pending', deviceType: 'both' }
+    { id: 'init', label: 'Starting Your Analysis', progress: 0, status: 'pending', deviceType: 'both' },
+    { id: 'desktop_capture', label: 'Capturing Desktop View', progress: 0, status: 'pending', deviceType: 'desktop' },
+    { id: 'mobile_capture', label: 'Capturing Mobile View', progress: 0, status: 'pending', deviceType: 'mobile' },
+    { id: 'desktop_elements', label: 'Studying Your Website Layout', progress: 0, status: 'pending', deviceType: 'desktop' },
+    { id: 'mobile_elements', label: 'Discovering Mobile Touch Points', progress: 0, status: 'pending', deviceType: 'mobile' },
+    { id: 'desktop_ai', label: 'Predicting User Behavior', progress: 0, status: 'pending', deviceType: 'desktop' },
+    { id: 'mobile_ai', label: 'Understanding Mobile Users', progress: 0, status: 'pending', deviceType: 'mobile' },
+    { id: 'desktop_cro', label: 'Optimizing for Conversions', progress: 0, status: 'pending', deviceType: 'desktop' },
+    { id: 'mobile_cro', label: 'Boosting Mobile Performance', progress: 0, status: 'pending', deviceType: 'mobile' },
+    { id: 'finalize', label: 'Preparing Your Report', progress: 0, status: 'pending', deviceType: 'both' }
   ])
   
   // Performance metrics tracking

@@ -33,159 +33,12 @@ interface CROExecutiveBriefProps {
   targetCTR?: number
   imageSize?: { width: number; height: number }
   openAIResult?: any // Add OpenAI result prop
+  primaryCTAPrediction?: ClickPredictionResult | null // Add missing prop
 }
 
 
 
-/**
- * REMOVED: convertInternalCROToUIFormat function no longer needed
- * Using internal CRO data directly now
- */
-function REMOVED_convertInternalCROToUIFormat_PLACEHOLDER(
-  internalCRO: any, 
-  primaryCTAPrediction?: any, 
-  matchedElement?: any
-): OpenAIAnalysis {
-  console.log("🔄 Converting internal CRO analysis to UI format...")
-  
-  if (!internalCRO) {
-    console.error("❌ No internal CRO data provided to conversion function")
-    throw new Error("Internal CRO data is required for conversion")
-  }
-  
-  const recommendations = internalCRO.recommendations || []
-  console.log("📝 Processing recommendations:", {
-    total: recommendations.length,
-    categories: [...new Set(recommendations.map((r: any) => r.category))]
-  })
-  
-  // Group recommendations by category (with fallbacks for different category names)
-  const quickWins = recommendations.filter((r: any) => r.category === 'Quick Wins')
-  const formFixes = recommendations.filter((r: any) => r.category === 'Form Fixes')
-  const structuralChanges = recommendations.filter((r: any) => r.category === 'Structural Changes')
-  const frictionPoints = recommendations.filter((r: any) => r.category === 'Friction Points')
-  const keyHighlights = recommendations.filter((r: any) => r.category === 'Key Highlights')
-  const roiInsights = recommendations.filter((r: any) => r.category === 'ROI Insights')
-  const nextSteps = recommendations.filter((r: any) => r.category === 'Next Steps')
-  
-  // Use Next Steps as Structural Changes if no dedicated structural changes exist
-  const effectiveStructuralChanges = structuralChanges.length > 0 ? structuralChanges : nextSteps
-  
-  // FIXED: Use click prediction system's CTA text instead of tokenizer's potentially incorrect identification
-  const primaryCTA = primaryCTAPrediction?.text || 
-                     matchedElement?.text || 
-                     internalCRO.tokens?.labels?.primary_cta || 
-                     "Primary CTA"
-  
-  console.log("🎯 CTA Text Source Priority:", {
-    primaryCTAPredictionText: primaryCTAPrediction?.text,
-    matchedElementText: matchedElement?.text,
-    tokenizerText: internalCRO.tokens?.labels?.primary_cta,
-    finalCTAText: primaryCTA
-  })
-  const currentCTR = 3.2 // Base conversion rate
-  const projectedCTR = currentCTR + (internalCRO.summary?.estimatedUpliftRange?.min || 0) / 100 * currentCTR
-  
-  // Calculate uplift metrics
-  const minUplift = internalCRO.summary?.estimatedUpliftRange?.min || 0
-  const maxUplift = internalCRO.summary?.estimatedUpliftRange?.max || 0
-  const totalUpliftRange = `${minUplift}-${maxUplift}%`
-  
-  const result = {
-    companyName: internalCRO.metadata?.url ? 
-      new URL(internalCRO.metadata.url).hostname.replace('www.', '').split('.')[0] : 
-      "Company",
-    url: internalCRO.metadata?.url || "",
-    deviceType: internalCRO.metadata?.deviceType || "desktop",
-    dateAnalyzed: new Date(internalCRO.metadata?.analyzedAt || Date.now()).toLocaleDateString(),
-    
-    currentPerformance: {
-      primaryCTA: primaryCTA,
-      currentConversionRate: currentCTR,
-      projectedConversionRate: projectedCTR,
-      monthlyWastedSpend: 2400, // Estimated based on improvements
-      ctaType: "button",
-      metricLabel: "Conversion Rate"
-    },
-    
-    frictionPoints: frictionPoints
-      .slice(0, 4)
-      .map((r: any) => ({
-        element: primaryCTA,
-        type: "usability",
-        problem: r.title,
-        impact: r.description.split('→')[1]?.trim() || r.impact
-      })),
-    
-    recommendedActions: {
-      phase1: {
-        title: "Quick Wins (1-2 hrs)",
-        description: `Immediate improvements to boost "${primaryCTA}" performance`,
-        elementsToFixOrRemove: quickWins.slice(0, 3).map((r: any) => r.description),
-        teamOwner: ["Designer"],
-        timeToValue: "1-2 days",
-        estimatedTime: "1-2 hrs",
-        expectedGain: quickWins.length > 0 ? quickWins[0].impact : "+3-5%"
-      },
-      phase2: {
-        title: "Form Fixes (3-5 hrs)",
-        description: "Optimize form completion and reduce abandonment",
-        elementsToFixOrImprove: formFixes.slice(0, 3).map((r: any) => r.description),
-        teamOwner: ["Developer"],
-        timeToValue: "2-4 days",
-        estimatedTime: "3-5 hrs",
-        expectedGain: formFixes.length > 0 ? formFixes[0].impact : "+5-8%"
-      },
-      phase3: {
-        title: "Structural (1-2 days)",
-        description: "Major layout and flow improvements",
-        changes: effectiveStructuralChanges.slice(0, 3).map((r: any) => r.description),
-        teamOwner: ["Designer", "Developer"],
-        timeToValue: "1-2 weeks",
-        estimatedTime: "1-2 days",
-        expectedGain: effectiveStructuralChanges.length > 0 ? effectiveStructuralChanges[0].impact : "+8-12%"
-      }
-    },
-    
-    // FIXED: Add missing projectedResults field
-    projectedResults: {
-      currentCTR: currentCTR,
-      optimizedCTR: projectedCTR,
-      totalUpliftRange: totalUpliftRange,
-      deviceSpecificROI: `${Math.round((projectedCTR / currentCTR - 1) * 100)}% CTR improvement expected`
-    },
-    
-    // FIXED: Add missing nextSteps field
-    nextSteps: [
-      "Implement Phase 1 quick wins to achieve immediate 3-5% improvement",
-      "Monitor conversion metrics for 1-2 weeks to validate initial improvements",
-      "Proceed with Phase 2 form optimizations for additional 5-8% gain",
-      "Execute Phase 3 structural changes for maximum conversion potential",
-      "Conduct A/B testing to validate each phase before full implementation"
-    ],
-    
-    // FIXED: Add missing highlights field
-    highlights: [
-      ...keyHighlights.map((r: any) => r.description),
-      ...roiInsights.map((r: any) => r.description),
-      ...(recommendations.length > 0 ? [`${recommendations.length} total optimization opportunities identified`] : []),
-      ...(minUplift > 0 ? [`Expected conversion rate improvement: ${totalUpliftRange}`] : [])
-    ].slice(0, 5), // Limit to 5 key highlights
-    
-    keyInsights: [
-      `Primary CTA "${primaryCTA}" shows ${minUplift}-${maxUplift}% improvement potential`,
-      `${internalCRO.summary?.totalRecommendations || 0} specific recommendations identified`,
-      `${internalCRO.summary?.quickWins || 0} quick wins available for immediate implementation`
-    ],
-    
-    reasoning: `Analysis based on ${internalCRO.summary?.totalRecommendations || 0} tokenized recommendations from internal CRO engine. Focus areas: ${quickWins.length > 0 ? 'Quick Wins' : ''}${formFixes.length > 0 ? ', Form Optimization' : ''}${effectiveStructuralChanges.length > 0 ? ', Structural Changes' : ''}${nextSteps.length > 0 ? ', Next Steps' : ''}.`,
-    
-    additionalNotes: `Internal CRO engine analysis completed in ${internalCRO.metadata?.analyzedAt ? 'real-time' : 'background'}. Recommendations are based on actual DOM analysis and proven conversion optimization patterns.`
-  }
-  
-  console.log("✅ Internal CRO conversion completed successfully")
-  return result
-}
+// REMOVED: convertInternalCROToUIFormat function no longer needed - using internal CRO data directly now
 
 export function CROExecutiveBrief({
   captureResult,
@@ -201,6 +54,7 @@ export function CROExecutiveBrief({
   targetCTR,
   imageSize,
   openAIResult,
+  primaryCTAPrediction,
 }: CROExecutiveBriefProps) {
   // DEBUG: Log component render and props
   console.log("🎯 CROExecutiveBrief component rendered with props:", {
@@ -234,18 +88,27 @@ export function CROExecutiveBrief({
 
   // Pre-populate data immediately from existing calculations
   const prePopulatedData = useMemo(() => {
-    const primaryCTAPrediction = primaryCTAId
+    // FIXED: Use the same Primary CTA source as tooltip (AI-determined, not highest clicks)
+    const primaryCTAPredictionFromClicks = primaryCTAId
       ? clickPredictions.find((pred) => pred.elementId === primaryCTAId)
       : clickPredictions[0]
+    
+    console.log("🔍 PRIMARY CTA PREDICTION LOOKUP:")
+    console.log("  primaryCTAId:", primaryCTAId)
+    console.log("  clickPredictions.length:", clickPredictions.length)
+    console.log("  found prediction:", primaryCTAPredictionFromClicks)
+    console.log("  prediction text:", primaryCTAPredictionFromClicks?.text)
+    console.log("  clickPredictions[0]:", clickPredictions[0])
+    console.log("  clickPredictions[0].text:", clickPredictions[0]?.text)
 
     let currentCTR = dynamicBaseline
     let projectedCTR = dynamicBaseline * 1.475
     let improvementPotential = 47.5
     // FIXED: Use the exact same approach as tooltip - directly use wastedSpend from prediction
-    let costSavings = primaryCTAPrediction?.wastedSpend || 0
+    let costSavings = primaryCTAPredictionFromClicks?.wastedSpend || 0
 
-    if (primaryCTAPrediction) {
-      currentCTR = primaryCTAPrediction.ctr || dynamicBaseline
+    if (primaryCTAPredictionFromClicks) {
+      currentCTR = primaryCTAPredictionFromClicks.ctr || dynamicBaseline
 
       if (targetCTR) {
         projectedCTR = targetCTR
@@ -256,14 +119,14 @@ export function CROExecutiveBrief({
       }
 
       // FIXED: Use wastedSpend directly from prediction (same as tooltip)
-      costSavings = primaryCTAPrediction.wastedSpend || 0
+      costSavings = primaryCTAPredictionFromClicks.wastedSpend || 0
 
       debugLogCategory("Click Prediction Report", "Using wastedSpend directly from prediction (same as tooltip):", {
-        elementId: primaryCTAPrediction.elementId,
+        elementId: primaryCTAPredictionFromClicks.elementId,
         currentCTR,
         projectedCTR,
         improvementPotential,
-        wastedSpend: primaryCTAPrediction.wastedSpend,
+        wastedSpend: primaryCTAPredictionFromClicks.wastedSpend,
         finalCostSavings: costSavings,
       })
     }
@@ -271,17 +134,26 @@ export function CROExecutiveBrief({
     const url = captureResult.domData?.url || "unknown"
     const companyName = url.includes("://") ? new URL(url).hostname.replace("www.", "") : url
 
+    // FIXED: Use the same Primary CTA source as tooltip (matchedElement.text first)
+    const finalPrimaryCTAText = matchedElement?.text || "Primary CTA"
+    
+    console.log("🎯 FIXED PRIMARY CTA TEXT DEBUG (same as tooltip):")
+    console.log("  finalPrimaryCTAText:", finalPrimaryCTAText)
+    console.log("  matchedElement?.text:", matchedElement?.text)
+    console.log("  fallback: Primary CTA")
+    console.log("  previouslyUsed primaryCTAPrediction?.text:", primaryCTAPrediction?.text)
+
     return {
       companyName,
       url,
       deviceType,
-      primaryCTAText: primaryCTAPrediction?.text || matchedElement?.text || "Primary CTA",
+      primaryCTAText: finalPrimaryCTAText, // Use AI-determined Primary CTA (same as tooltip)
       currentCTR: currentCTR * 100,
       projectedCTR: projectedCTR * 100,
       improvementPotential,
       costSavings,
       isFormRelated,
-      primaryCTAPrediction,
+      primaryCTAPrediction: primaryCTAPredictionFromClicks, // Keep click prediction for metrics
     }
   }, [
     captureResult,
@@ -291,6 +163,7 @@ export function CROExecutiveBrief({
     dynamicBaseline,
     isFormRelated,
     matchedElement,
+    primaryCTAPrediction, // Add this dependency
     targetCTR,
   ])
 

@@ -34,14 +34,34 @@ export function FunnelIntel({ originalData, funnelData, onBack }: FunnelIntelPro
   const benchmarkScore = funnelAnalysis?.overallScore || 7.8
   const advantage = Math.round(((yourScore - benchmarkScore) / benchmarkScore) * 100)
 
-  // Extract actual conversion rates from click prediction data
-  const getActualConversionRate = (data: any) => {
-    const primaryCTA = data?.primaryCTAPrediction || data?.clickPredictions?.[0]
-    return primaryCTA?.ctr ? (primaryCTA.ctr * 100) : 0
+  // Use same calculation approach as CompetitorAnalysis and FunnelAnalysis
+  const getDirectMetrics = (predictions: any[], primaryCTA: any, fallbackCTR: number = 0.02) => {
+    if (!predictions || predictions.length === 0 || !primaryCTA) {
+      return { avgCTR: fallbackCTR, currentCTR: fallbackCTR }
+    }
+
+    // Use DIRECT primary CTA data - exactly like other analysis components
+    const primaryCTR = primaryCTA.ctr || fallbackCTR
+    
+    return {
+      avgCTR: primaryCTR,
+      currentCTR: primaryCTR
+    }
   }
 
-  const yourConversionRate = getActualConversionRate(originalData) || 2.0
-  const benchmarkConversionRate = getActualConversionRate(funnelData) || 1.8
+  const yourMetricsData = getDirectMetrics(
+    originalData.clickPredictions || [],
+    originalData.primaryCTAPrediction,
+    0.02
+  )
+  const benchmarkMetricsData = getDirectMetrics(
+    funnelData.clickPredictions || [],
+    funnelData.primaryCTAPrediction,
+    0.018
+  )
+
+  const yourConversionRate = yourMetricsData.currentCTR * 100
+  const benchmarkConversionRate = benchmarkMetricsData.currentCTR * 100
 
   // Real metrics with actual conversion rates and smart defaults for other metrics
   const yourMetrics = {
