@@ -191,12 +191,18 @@ export function FunnelAnalysis({ originalData, funnelData, onFunnelUrlSubmit }: 
       })
     }
     
-    console.log('📊 Setting initial loading state')
-    setSecondaryAnalysis({ isLoading: true, data: null, error: false, progress: 0, stage: 'Starting analysis...' })
+    console.log('📊 [FUNNEL-OPTIMIZED] Setting enhanced loading state for secondary page')
+    const startTime = Date.now()
+    setSecondaryAnalysis({ isLoading: true, data: null, error: false, progress: 0, stage: 'Initializing funnel analysis...' })
     
     try {
-      // Step 1: Capture the destination page (OPTIMIZED: desktop only, no mobile for page 2)
-      setSecondaryAnalysis(prev => ({ ...prev, progress: 10, stage: 'Capturing page...' }))
+      // Step 1: Enhanced capture with progress tracking
+      setSecondaryAnalysis(prev => ({ ...prev, progress: 5, stage: 'Preparing capture request...' }))
+      
+      // Brief pause for smooth UX feedback
+      await new Promise(resolve => setTimeout(resolve, 50))
+      
+      setSecondaryAnalysis(prev => ({ ...prev, progress: 10, stage: 'Capturing secondary page (optimized)...' }))
       
       console.log('🔍 [FUNNEL-DEBUG] Preparing API request:', {
         endpoint: '/api/capture',
@@ -285,8 +291,18 @@ export function FunnelAnalysis({ originalData, funnelData, onFunnelUrlSubmit }: 
         timestamp: new Date().toISOString()
       })
       
-      // Step 2: Predict clicks on the captured page (OPTIMIZED: faster without CRO)
-      setSecondaryAnalysis(prev => ({ ...prev, progress: 50, stage: 'Analyzing CTAs...' }))
+      const captureTime = Date.now() - startTime
+      console.log(`✅ [FUNNEL-OPTIMIZED] Capture completed in ${captureTime}ms`)
+      
+      // Step 2: Enhanced click prediction analysis with progress tracking
+      setSecondaryAnalysis(prev => ({ ...prev, progress: 35, stage: 'Processing page elements...' }))
+      
+      // Brief pause for smooth progress display
+      await new Promise(resolve => setTimeout(resolve, 50))
+      
+      setSecondaryAnalysis(prev => ({ ...prev, progress: 50, stage: 'Analyzing CTAs (optimized)...' }))
+      
+      const clickPredictionStart = Date.now()
       const clicksResponse = await fetch('/api/predict-clicks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -313,22 +329,31 @@ export function FunnelAnalysis({ originalData, funnelData, onFunnelUrlSubmit }: 
         }
         
         // Continue with fallback data instead of throwing error
-        setSecondaryAnalysis(prev => ({ ...prev, progress: 80, stage: 'Using fallback predictions...' }))
+        setSecondaryAnalysis(prev => ({ ...prev, progress: 65, stage: 'Using fallback predictions...' }))
         var clickPredictions = fallbackClickPredictions
       } else {
         var clickPredictions = await clicksResponse.json()
         clickPredictions.dataSource = 'REAL_API'
-        console.log('📊 MAIN DATA SOURCE: Using REAL API click predictions')
+        console.log('📊 [FUNNEL-OPTIMIZED] Using REAL API click predictions')
       }
+      
+      const clickPredictionTime = Date.now() - clickPredictionStart
+      console.log(`✅ [FUNNEL-OPTIMIZED] Click predictions completed in ${clickPredictionTime}ms`)
+      
       const primaryCTAId = clickPredictions.primaryCTAId
       const primaryCTAPrediction = clickPredictions.predictions.find((p: any) => p.elementId === primaryCTAId) || clickPredictions.predictions[0]
       
+      // Progress update
+      setSecondaryAnalysis(prev => ({ ...prev, progress: 70, stage: 'Processing CTA data...' }))
+      
       // OPTIMIZED: Skip CRO analysis for page 2 in funnel analysis (not needed and slows down process)
-      console.log('⚡ OPTIMIZATION: Skipping CRO analysis for page 2 - not needed for funnel flow')
+      console.log('⚡ [FUNNEL-OPTIMIZATION] Skipping CRO analysis for page 2 - not needed for funnel flow')
       const croAnalysisResult = null // No CRO analysis needed for page 2
       
-      // Step 4: Enhance with post-click prediction
-      setSecondaryAnalysis(prev => ({ ...prev, progress: 85, stage: 'Analyzing conversion factors...' }))
+      // Step 4: Enhanced post-click prediction with progress tracking
+      setSecondaryAnalysis(prev => ({ ...prev, progress: 80, stage: 'Analyzing conversion factors...' }))
+      
+      const postClickStart = Date.now()
       
       let postClickPrediction = null
       try {
@@ -398,6 +423,15 @@ export function FunnelAnalysis({ originalData, funnelData, onFunnelUrlSubmit }: 
         model: 'post-click-prediction'
       })
       
+      const postClickTime = Date.now() - postClickStart
+      console.log(`✅ [FUNNEL-OPTIMIZED] Post-click analysis completed in ${postClickTime}ms`)
+      
+      // Final progress updates
+      setSecondaryAnalysis(prev => ({ ...prev, progress: 95, stage: 'Finalizing analysis...' }))
+      
+      // Brief pause for smooth completion
+      await new Promise(resolve => setTimeout(resolve, 50))
+      
       const secondaryData = {
         url: destinationUrl,
         captureResult,
@@ -411,7 +445,19 @@ export function FunnelAnalysis({ originalData, funnelData, onFunnelUrlSubmit }: 
         postClickPrediction: postClickPrediction?.prediction
       }
       
-      setSecondaryAnalysis({ isLoading: false, data: secondaryData, error: false, progress: 100, stage: 'Complete' })
+      const totalTime = Date.now() - startTime
+      console.log(`🎉 [FUNNEL-OPTIMIZED] Secondary page analysis completed successfully!`, {
+        totalTime: `${totalTime}ms`,
+        captureTime: `${captureTime}ms`,
+        clickPredictionTime: `${clickPredictionTime}ms`,
+        postClickTime: `${postClickTime}ms`,
+        clickPredictions: clickPredictions.predictions?.length || 0,
+        hasPostClickPrediction: !!postClickPrediction,
+        dataSource: clickPredictions.dataSource || 'unknown',
+        performanceImprovement: "Enhanced with detailed progress tracking"
+      })
+      
+      setSecondaryAnalysis({ isLoading: false, data: secondaryData, error: false, progress: 100, stage: 'Analysis complete!' })
       
       // 🔒 LOCK MAIN FUNNEL: Prevent any re-analysis once completed
       setMainFunnelLocked(true)
@@ -1201,6 +1247,14 @@ export function FunnelAnalysis({ originalData, funnelData, onFunnelUrlSubmit }: 
     console.log('MAIN isNonFormCTA:', isNonFormCTA)
     
     if (isNonFormCTA) {
+      // Enhanced URL extraction with early validation
+      console.log('🔍 [FUNNEL-DEBUG] Starting URL extraction for MAIN funnel:', {
+        hasPrediction: !!stableOriginalData.primaryCTAPrediction,
+        predictionText: stableOriginalData.primaryCTAPrediction?.text,
+        predictionHref: stableOriginalData.primaryCTAPrediction?.href,
+        hasATFData: !!stableOriginalData.captureResult?.domData?.atfPremium?.enhancedData
+      })
+      
       const destinationUrl = getDestinationUrl(stableOriginalData.primaryCTAPrediction, stableOriginalData)
       console.log('MAIN destinationUrl:', destinationUrl)
       console.log('MAIN jsNavigation clues:', stableOriginalData.primaryCTAPrediction?.jsNavigation)
@@ -1232,6 +1286,17 @@ export function FunnelAnalysis({ originalData, funnelData, onFunnelUrlSubmit }: 
         return () => clearTimeout(timeoutId)
       } else {
         console.log('❌ No destination URL found for MAIN non-form CTA')
+        
+        // CRITICAL FIX: Set error state when no URL is found to prevent infinite loading
+        setSecondaryAnalysis({ 
+          isLoading: false, 
+          data: null, 
+          error: true, 
+          progress: 0, 
+          stage: 'URL extraction failed - manual analysis needed' 
+        })
+        
+        console.log('🔧 [FUNNEL-FIX] Set error state for failed URL extraction to prevent infinite loading')
       }
     }
   }, [stableOriginalData.primaryCTAPrediction?.elementId, stableOriginalData.primaryCTAPrediction?.isFormRelated, mainFunnelLocked]) // STABLE: Using frozen data + lock check
@@ -1259,6 +1324,14 @@ export function FunnelAnalysis({ originalData, funnelData, onFunnelUrlSubmit }: 
     console.log('COMPARISON isNonFormCTA:', isNonFormCTA)
     
     if (isNonFormCTA && funnelData) {
+      // Enhanced URL extraction with early validation for comparison
+      console.log('🔍 [FUNNEL-DEBUG] Starting URL extraction for COMPARISON funnel:', {
+        hasPrediction: !!funnelData.primaryCTAPrediction,
+        predictionText: funnelData.primaryCTAPrediction?.text,
+        predictionHref: funnelData.primaryCTAPrediction?.href,
+        hasATFData: !!funnelData.captureResult?.domData?.atfPremium?.enhancedData
+      })
+      
       const destinationUrl = getDestinationUrl(funnelData.primaryCTAPrediction, funnelData)
       console.log('🔍 COMPARISON: destinationUrl:', destinationUrl)
       console.log('🔍 COMPARISON: jsNavigation clues:', funnelData.primaryCTAPrediction?.jsNavigation)
@@ -1307,6 +1380,17 @@ export function FunnelAnalysis({ originalData, funnelData, onFunnelUrlSubmit }: 
         return () => clearTimeout(timeoutId)
       } else {
         console.log('❌ No destination URL found for COMPARISON non-form CTA')
+        
+        // CRITICAL FIX: Set error state when no URL is found to prevent infinite loading
+        setComparisonSecondaryAnalysis({ 
+          isLoading: false, 
+          data: null, 
+          error: true, 
+          progress: 0, 
+          stage: 'URL extraction failed - manual analysis needed' 
+        })
+        
+        console.log('🔧 [FUNNEL-FIX] Set error state for failed comparison URL extraction to prevent infinite loading')
       }
     } else {
       console.log('🔍 COMPARISON ANALYSIS SKIPPED:', {
