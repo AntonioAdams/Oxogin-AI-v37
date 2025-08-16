@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -33,81 +33,159 @@ interface CROExecutiveBriefProps {
   targetCTR?: number
   imageSize?: { width: number; height: number }
   openAIResult?: any // Add OpenAI result prop
-  actualCROData?: {
-    currentCTR: number
-    projectedCTR: number
-    improvementPotential: number
-    costSavings: number
-    implementationDifficulty: string
-    priorityScore: number
-  }
 }
 
-interface OpenAIAnalysis {
-  companyName: string
-  url: string
-  deviceType: string
-  dateAnalyzed: string
-  currentPerformance: {
-    primaryCTA: string
-    currentConversionRate: number
-    projectedConversionRate: number
-    monthlyWastedSpend: number
-    deviceSpecificMetrics?: any
-  }
-  frictionPoints: Array<{
-    element: string
-    type: string
-    problem: string
-    impact: string
-  }>
-  recommendedActions: {
-    phase1: {
-      title: string
-      description: string
-      elementsToFixOrRemove: string[]  // Updated field name
-      teamOwner: string[]              // New field
-      timeToValue: string              // New field
-      estimatedTime: string            // New field
-      expectedGain: string
-      // Keep backward compatibility
-      elementsToRemove?: string[]
-    }
-    phase2: {
-      title: string
-      description: string
-      elementsToFixOrImprove: string[] // Updated field name
-      teamOwner: string[]              // New field
-      timeToValue: string              // New field
-      estimatedTime: string            // New field
-      expectedGain: string
-      // Keep backward compatibility
-      elementsToRemove?: string[]
-    }
-    phase3: {
-      title: string
-      description: string
-      changes: string[]                // Keep existing field
-      teamOwner: string[]              // New field
-      timeToValue: string              // New field
-      estimatedTime: string            // New field
-      expectedGain: string
-    }
-  }
-  deviceSpecificInsights?: any
-  projectedResults: {
-    currentCTR: number
-    optimizedCTR: number
-    totalUpliftRange: string
-    deviceSpecificROI: string
-  }
-  nextSteps: string[]
-  highlights: string[]                 // New field
-  additionalNotes: string
-}
 
-// Cache for AI analysis results - persists across tab switches
-const aiAnalysisCache = new Map<string, OpenAIAnalysis>()
+
+/**
+ * REMOVED: convertInternalCROToUIFormat function no longer needed
+ * Using internal CRO data directly now
+ */
+function REMOVED_convertInternalCROToUIFormat_PLACEHOLDER(
+  internalCRO: any, 
+  primaryCTAPrediction?: any, 
+  matchedElement?: any
+): OpenAIAnalysis {
+  console.log("🔄 Converting internal CRO analysis to UI format...")
+  
+  if (!internalCRO) {
+    console.error("❌ No internal CRO data provided to conversion function")
+    throw new Error("Internal CRO data is required for conversion")
+  }
+  
+  const recommendations = internalCRO.recommendations || []
+  console.log("📝 Processing recommendations:", {
+    total: recommendations.length,
+    categories: [...new Set(recommendations.map((r: any) => r.category))]
+  })
+  
+  // Group recommendations by category (with fallbacks for different category names)
+  const quickWins = recommendations.filter((r: any) => r.category === 'Quick Wins')
+  const formFixes = recommendations.filter((r: any) => r.category === 'Form Fixes')
+  const structuralChanges = recommendations.filter((r: any) => r.category === 'Structural Changes')
+  const frictionPoints = recommendations.filter((r: any) => r.category === 'Friction Points')
+  const keyHighlights = recommendations.filter((r: any) => r.category === 'Key Highlights')
+  const roiInsights = recommendations.filter((r: any) => r.category === 'ROI Insights')
+  const nextSteps = recommendations.filter((r: any) => r.category === 'Next Steps')
+  
+  // Use Next Steps as Structural Changes if no dedicated structural changes exist
+  const effectiveStructuralChanges = structuralChanges.length > 0 ? structuralChanges : nextSteps
+  
+  // FIXED: Use click prediction system's CTA text instead of tokenizer's potentially incorrect identification
+  const primaryCTA = primaryCTAPrediction?.text || 
+                     matchedElement?.text || 
+                     internalCRO.tokens?.labels?.primary_cta || 
+                     "Primary CTA"
+  
+  console.log("🎯 CTA Text Source Priority:", {
+    primaryCTAPredictionText: primaryCTAPrediction?.text,
+    matchedElementText: matchedElement?.text,
+    tokenizerText: internalCRO.tokens?.labels?.primary_cta,
+    finalCTAText: primaryCTA
+  })
+  const currentCTR = 3.2 // Base conversion rate
+  const projectedCTR = currentCTR + (internalCRO.summary?.estimatedUpliftRange?.min || 0) / 100 * currentCTR
+  
+  // Calculate uplift metrics
+  const minUplift = internalCRO.summary?.estimatedUpliftRange?.min || 0
+  const maxUplift = internalCRO.summary?.estimatedUpliftRange?.max || 0
+  const totalUpliftRange = `${minUplift}-${maxUplift}%`
+  
+  const result = {
+    companyName: internalCRO.metadata?.url ? 
+      new URL(internalCRO.metadata.url).hostname.replace('www.', '').split('.')[0] : 
+      "Company",
+    url: internalCRO.metadata?.url || "",
+    deviceType: internalCRO.metadata?.deviceType || "desktop",
+    dateAnalyzed: new Date(internalCRO.metadata?.analyzedAt || Date.now()).toLocaleDateString(),
+    
+    currentPerformance: {
+      primaryCTA: primaryCTA,
+      currentConversionRate: currentCTR,
+      projectedConversionRate: projectedCTR,
+      monthlyWastedSpend: 2400, // Estimated based on improvements
+      ctaType: "button",
+      metricLabel: "Conversion Rate"
+    },
+    
+    frictionPoints: frictionPoints
+      .slice(0, 4)
+      .map((r: any) => ({
+        element: primaryCTA,
+        type: "usability",
+        problem: r.title,
+        impact: r.description.split('→')[1]?.trim() || r.impact
+      })),
+    
+    recommendedActions: {
+      phase1: {
+        title: "Quick Wins (1-2 hrs)",
+        description: `Immediate improvements to boost "${primaryCTA}" performance`,
+        elementsToFixOrRemove: quickWins.slice(0, 3).map((r: any) => r.description),
+        teamOwner: ["Designer"],
+        timeToValue: "1-2 days",
+        estimatedTime: "1-2 hrs",
+        expectedGain: quickWins.length > 0 ? quickWins[0].impact : "+3-5%"
+      },
+      phase2: {
+        title: "Form Fixes (3-5 hrs)",
+        description: "Optimize form completion and reduce abandonment",
+        elementsToFixOrImprove: formFixes.slice(0, 3).map((r: any) => r.description),
+        teamOwner: ["Developer"],
+        timeToValue: "2-4 days",
+        estimatedTime: "3-5 hrs",
+        expectedGain: formFixes.length > 0 ? formFixes[0].impact : "+5-8%"
+      },
+      phase3: {
+        title: "Structural (1-2 days)",
+        description: "Major layout and flow improvements",
+        changes: effectiveStructuralChanges.slice(0, 3).map((r: any) => r.description),
+        teamOwner: ["Designer", "Developer"],
+        timeToValue: "1-2 weeks",
+        estimatedTime: "1-2 days",
+        expectedGain: effectiveStructuralChanges.length > 0 ? effectiveStructuralChanges[0].impact : "+8-12%"
+      }
+    },
+    
+    // FIXED: Add missing projectedResults field
+    projectedResults: {
+      currentCTR: currentCTR,
+      optimizedCTR: projectedCTR,
+      totalUpliftRange: totalUpliftRange,
+      deviceSpecificROI: `${Math.round((projectedCTR / currentCTR - 1) * 100)}% CTR improvement expected`
+    },
+    
+    // FIXED: Add missing nextSteps field
+    nextSteps: [
+      "Implement Phase 1 quick wins to achieve immediate 3-5% improvement",
+      "Monitor conversion metrics for 1-2 weeks to validate initial improvements",
+      "Proceed with Phase 2 form optimizations for additional 5-8% gain",
+      "Execute Phase 3 structural changes for maximum conversion potential",
+      "Conduct A/B testing to validate each phase before full implementation"
+    ],
+    
+    // FIXED: Add missing highlights field
+    highlights: [
+      ...keyHighlights.map((r: any) => r.description),
+      ...roiInsights.map((r: any) => r.description),
+      ...(recommendations.length > 0 ? [`${recommendations.length} total optimization opportunities identified`] : []),
+      ...(minUplift > 0 ? [`Expected conversion rate improvement: ${totalUpliftRange}`] : [])
+    ].slice(0, 5), // Limit to 5 key highlights
+    
+    keyInsights: [
+      `Primary CTA "${primaryCTA}" shows ${minUplift}-${maxUplift}% improvement potential`,
+      `${internalCRO.summary?.totalRecommendations || 0} specific recommendations identified`,
+      `${internalCRO.summary?.quickWins || 0} quick wins available for immediate implementation`
+    ],
+    
+    reasoning: `Analysis based on ${internalCRO.summary?.totalRecommendations || 0} tokenized recommendations from internal CRO engine. Focus areas: ${quickWins.length > 0 ? 'Quick Wins' : ''}${formFixes.length > 0 ? ', Form Optimization' : ''}${effectiveStructuralChanges.length > 0 ? ', Structural Changes' : ''}${nextSteps.length > 0 ? ', Next Steps' : ''}.`,
+    
+    additionalNotes: `Internal CRO engine analysis completed in ${internalCRO.metadata?.analyzedAt ? 'real-time' : 'background'}. Recommendations are based on actual DOM analysis and proven conversion optimization patterns.`
+  }
+  
+  console.log("✅ Internal CRO conversion completed successfully")
+  return result
+}
 
 export function CROExecutiveBrief({
   captureResult,
@@ -123,21 +201,22 @@ export function CROExecutiveBrief({
   targetCTR,
   imageSize,
   openAIResult,
-  actualCROData,
 }: CROExecutiveBriefProps) {
-  const [openAIAnalysis, setOpenAIAnalysis] = useState<OpenAIAnalysis | null>(openAIResult || null)
-  const [isLoadingOpenAI, setIsLoadingOpenAI] = useState(false)
-  const [openAIError, setOpenAIError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<"overview" | "projections">("overview")
+  // DEBUG: Log component render and props
+  console.log("🎯 CROExecutiveBrief component rendered with props:", {
+    hasCaptureResult: !!captureResult,
+    hasClickPredictions: !!clickPredictions,
+    clickPredictionsLength: clickPredictions?.length || 0,
+    primaryCTAId,
+    hasMatchedElement: !!matchedElement,
+    hasCroAnalysisResult: !!croAnalysisResult,
+    croAnalysisKeys: croAnalysisResult ? Object.keys(croAnalysisResult) : [],
+    croRecommendationsCount: croAnalysisResult?.recommendations?.length || 0
+  })
 
-  // Update openAIAnalysis when openAIResult changes
-  useEffect(() => {
-    if (openAIResult) {
-      // The API now returns the analysis directly, not wrapped in executiveBrief
-      setOpenAIAnalysis(openAIResult)
-      debugLogCategory("CROExecutiveBrief", "Received OpenAI result:", openAIResult)
-    }
-  }, [openAIResult])
+
+
+
 
   // Derive device type from data
   const deviceType = useMemo(() => {
@@ -165,12 +244,7 @@ export function CROExecutiveBrief({
     // FIXED: Use the exact same approach as tooltip - directly use wastedSpend from prediction
     let costSavings = primaryCTAPrediction?.wastedSpend || 0
 
-    if (actualCROData) {
-      currentCTR = actualCROData.currentCTR
-      projectedCTR = actualCROData.projectedCTR
-      improvementPotential = actualCROData.improvementPotential
-      costSavings = actualCROData.costSavings
-    } else if (primaryCTAPrediction) {
+    if (primaryCTAPrediction) {
       currentCTR = primaryCTAPrediction.ctr || dynamicBaseline
 
       if (targetCTR) {
@@ -217,7 +291,6 @@ export function CROExecutiveBrief({
     dynamicBaseline,
     isFormRelated,
     matchedElement,
-    actualCROData,
     targetCTR,
   ])
 
@@ -226,98 +299,13 @@ export function CROExecutiveBrief({
     return `${prePopulatedData.url}-${deviceType}-${primaryCTAId}-${prePopulatedData.primaryCTAText}`
   }, [prePopulatedData.url, deviceType, primaryCTAId, prePopulatedData.primaryCTAText])
 
-  // Check cache on mount and when cache key changes
-  useEffect(() => {
-    const cachedAnalysis = aiAnalysisCache.get(cacheKey)
-    if (cachedAnalysis) {
-      debugLogCategory("CROExecutiveBrief", "Loading cached AI analysis for:", cacheKey)
-      setOpenAIAnalysis(cachedAnalysis)
-      setOpenAIError(null)
-    }
-  }, [cacheKey])
 
-  // Note: Auto-trigger removed to prevent duplicate analysis calls
-  // Analysis is now handled by the main flow in app/page.tsx
 
-  const triggerOpenAIAnalysis = async () => {
-    if (!captureResult?.domData || !prePopulatedData) {
-      console.error("Missing required data for OpenAI analysis")
-      return
-    }
 
-    setIsLoadingOpenAI(true)
-    setOpenAIError(null)
 
-    try {
-      debugLogCategory("CROExecutiveBrief", "Starting OpenAI CRO analysis...")
 
-      const cacheKey = `${deviceType}-${primaryCTAId}-${prePopulatedData.primaryCTAText}`
 
-      // Compress screenshot before sending
-      const compressedScreenshot = await compressScreenshotClient(captureResult.screenshot, deviceType || "desktop")
 
-      const requestPayload = {
-        primaryCTAId: primaryCTAId || "primary-cta",
-        primaryCTAText: prePopulatedData.primaryCTAText,
-        deviceType: deviceType || "desktop",
-        currentCTR: prePopulatedData.currentCTR,
-        projectedCTR: prePopulatedData.projectedCTR,
-        improvementPotential: prePopulatedData.improvementPotential,
-        costSavings: prePopulatedData.costSavings,
-        screenshot: compressedScreenshot, // Use compressed screenshot
-      }
-
-      // FIXED: Using unified analysis results from props
-      console.log("✅ Using unified analysis results for CRO data (no separate API call needed)")
-      
-      // Check if we already have unified analysis results from props
-      if (croAnalysisResult?.cro) {
-        console.log("📊 Using existing CRO analysis from unified analysis")
-        setOpenAIAnalysis(croAnalysisResult.cro)
-        return
-      }
-      
-      // Fallback if no unified analysis available
-      const result = { 
-        success: true, 
-        executiveBrief: "Using unified analysis data" 
-      }
-      debugLogCategory("CROExecutiveBrief", "Using unified analysis data instead of separate API call")
-
-      if (result.success && result.executiveBrief) {
-        aiAnalysisCache.set(cacheKey, result.executiveBrief)
-        debugLogCategory("CROExecutiveBrief", "Cached AI analysis for:", cacheKey)
-        setOpenAIAnalysis(result.executiveBrief)
-      } else {
-        throw new Error(result.error || "AI analysis failed")
-      }
-    } catch (error) {
-      console.error("🧠 AI analysis error:", error)
-      setOpenAIError(error instanceof Error ? error.message : "Analysis failed")
-    } finally {
-      setIsLoadingOpenAI(false)
-    }
-  }
-
-  // Calculate phase results using the target CTR as the final goal
-  const calculatePhaseResults = () => {
-    const currentCTR = prePopulatedData.currentCTR
-    const finalTargetCTR = prePopulatedData.projectedCTR
-
-    const phase1CTR = currentCTR * 1.035
-    const phase2CTR = phase1CTR * 1.1
-    const phase3CTR = finalTargetCTR
-
-    return {
-      current: currentCTR,
-      phase1: phase1CTR,
-      phase2: phase2CTR,
-      phase3: phase3CTR,
-      totalUplift: ((phase3CTR - currentCTR) / currentCTR) * 100,
-    }
-  }
-
-  const phaseResults = calculatePhaseResults()
 
   return (
     <div className="space-y-6">
@@ -337,529 +325,201 @@ export function CROExecutiveBrief({
             </div>
           </div>
           <div className="flex items-center gap-3">
-            {isLoadingOpenAI ? (
-              <Badge variant="secondary" className="bg-blue-100 text-blue-700 border-blue-200">
-                <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                AI Analyzing...
-              </Badge>
-            ) : openAIAnalysis ? (
-              <Badge variant="secondary" className="bg-green-100 text-green-700 border-green-200">
-                Analysis Complete
-              </Badge>
-            ) : (
-              <Badge variant="secondary" className="bg-gray-100 text-gray-700 border-gray-200">
-                Ready for Analysis
-              </Badge>
-            )}
+            <Badge variant="secondary" className="bg-green-100 text-green-700 border-green-200">
+              Analysis Ready
+            </Badge>
           </div>
         </div>
 
-        {/* Tab Navigation */}
-        <div className="flex gap-4 mb-6">
-          <button
-            onClick={() => setActiveTab("overview")}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              activeTab === "overview" ? "bg-white text-gray-900 shadow-sm" : "text-gray-600 hover:text-gray-900"
-            }`}
-          >
-            Overview
-          </button>
-          <button
-            onClick={() => setActiveTab("projections")}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              activeTab === "projections" ? "bg-white text-gray-900 shadow-sm" : "text-gray-600 hover:text-gray-900"
-            }`}
-          >
-            Projections
-          </button>
+
+
+        {/* Current Performance Snapshot */}
+        <div>
+          <div className="flex items-center gap-2 mb-4">
+            <BarChart3 className="w-5 h-5 text-gray-700" />
+            <h3 className="text-lg font-semibold text-gray-900">Current Performance Snapshot</h3>
+            <Badge variant="secondary" className="bg-green-100 text-green-700 border-green-200">
+              Using Actual Data
+            </Badge>
+          </div>
+
+          {/* Performance Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Primary CTA */}
+            <Card className="bg-white border border-gray-200">
+              <CardContent className="p-4">
+                <div className="text-sm font-medium text-gray-700 mb-2">Primary CTA</div>
+                <div className="text-xl font-bold text-blue-600 truncate">"{prePopulatedData.primaryCTAText}"</div>
+              </CardContent>
+            </Card>
+
+            {/* Current CTR/Conversion Rate */}
+            <Card className="bg-white border border-gray-200">
+              <CardContent className="p-4">
+                <div className="text-sm font-medium text-gray-700 mb-2">
+                  Current {isFormRelated ? "Conversion Rate" : "CTR"}
+                </div>
+                <div className="text-2xl font-bold text-green-600">{prePopulatedData.currentCTR.toFixed(1)}%</div>
+              </CardContent>
+            </Card>
+
+            {/* Projected Conversion Rate/CTR */}
+            <Card className="bg-white border border-gray-200">
+              <CardContent className="p-4">
+                <div className="text-sm font-medium text-gray-700 mb-2">
+                  Projected {isFormRelated ? "Conversion Rate" : "CTR"}
+                </div>
+                <div className="text-2xl font-bold text-blue-600">{prePopulatedData.projectedCTR.toFixed(1)}%</div>
+              </CardContent>
+            </Card>
+          </div>
         </div>
 
-        {/* Tab Content */}
-        {activeTab === "overview" && (
-          <div>
-            <div className="flex items-center gap-2 mb-4">
-              <BarChart3 className="w-5 h-5 text-gray-700" />
-              <h3 className="text-lg font-semibold text-gray-900">Current Performance Snapshot</h3>
-              <Badge variant="secondary" className="bg-green-100 text-green-700 border-green-200">
-                Using Actual Data
-              </Badge>
-            </div>
 
-            {/* Performance Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Primary CTA */}
-              <Card className="bg-white border border-gray-200">
-                <CardContent className="p-4">
-                  <div className="text-sm font-medium text-gray-700 mb-2">Primary CTA</div>
-                  <div className="text-xl font-bold text-blue-600 truncate">"{prePopulatedData.primaryCTAText}"</div>
-                </CardContent>
-              </Card>
-
-              {/* Current CTR/Conversion Rate */}
-              <Card className="bg-white border border-gray-200">
-                <CardContent className="p-4">
-                  <div className="text-sm font-medium text-gray-700 mb-2">
-                    Current {isFormRelated ? "Conversion Rate" : "CTR"}
-                  </div>
-                  <div className="text-2xl font-bold text-green-600">{prePopulatedData.currentCTR.toFixed(1)}%</div>
-                </CardContent>
-              </Card>
-
-              {/* Projected Conversion Rate/CTR */}
-              <Card className="bg-white border border-gray-200">
-                <CardContent className="p-4">
-                  <div className="text-sm font-medium text-gray-700 mb-2">
-                    Projected {isFormRelated ? "Conversion Rate" : "CTR"}
-                  </div>
-                  <div className="text-2xl font-bold text-blue-600">{prePopulatedData.projectedCTR.toFixed(1)}%</div>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-        )}
-
-        {activeTab === "projections" && (
-          <div>
-            <div className="flex items-center gap-2 mb-4">
-              <TrendingUp className="w-5 h-5 text-gray-700" />
-              <h3 className="text-lg font-semibold text-gray-900">Projected Results Summary</h3>
-              <Badge variant="secondary" className="bg-green-100 text-green-700 border-green-200">
-                Based on Actual Data
-              </Badge>
-            </div>
-
-            {/* Phase Results */}
-            <div className="space-y-4">
-              {/* Current Performance */}
-              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 bg-gray-600 text-white rounded-full flex items-center justify-center text-sm font-bold">
-                    📊
-                  </div>
-                  <span className="font-medium text-gray-900">Current Performance</span>
-                </div>
-                <div className="text-right">
-                  <div className="text-xl font-bold text-gray-900">{phaseResults.current.toFixed(1)}%</div>
-                  <div className="text-sm text-gray-600">{isFormRelated ? "Conversion Rate" : "CTR"} Baseline</div>
-                </div>
-              </div>
-
-              {/* Phase 1 */}
-              <div className="flex items-center justify-between p-4 bg-white rounded-lg border border-gray-200">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold">
-                    1
-                  </div>
-                  <span className="font-medium text-gray-900">After Phase 1 (Easy Header Cleanup)</span>
-                </div>
-                <div className="text-right">
-                  <div className="text-xl font-bold text-blue-600">{phaseResults.phase1.toFixed(1)}%</div>
-                  <div className="text-sm text-green-600 font-medium">+3-5% {isFormRelated ? "Conversion" : "CTR"}</div>
-                </div>
-              </div>
-
-              {/* Phase 2 */}
-              <div className="flex items-center justify-between p-4 bg-white rounded-lg border border-gray-200">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 bg-green-600 text-white rounded-full flex items-center justify-center text-sm font-bold">
-                    2
-                  </div>
-                  <span className="font-medium text-gray-900">After Phase 2 (Moderate Changes)</span>
-                </div>
-                <div className="text-right">
-                  <div className="text-xl font-bold text-green-600">{phaseResults.phase2.toFixed(1)}%</div>
-                  <div className="text-sm text-green-600 font-medium">
-                    +8-12% {isFormRelated ? "Conversion" : "CTR"}
-                  </div>
-                </div>
-              </div>
-
-              {/* Phase 3 */}
-              <div className="flex items-center justify-between p-4 bg-white rounded-lg border border-gray-200">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 bg-purple-600 text-white rounded-full flex items-center justify-center text-sm font-bold">
-                    3
-                  </div>
-                  <span className="font-medium text-gray-900">After Phase 3 (Advanced)</span>
-                </div>
-                <div className="text-right">
-                  <div className="text-xl font-bold text-purple-600">{phaseResults.phase3.toFixed(1)}%</div>
-                  <div className="text-sm text-green-600 font-medium">
-                    +{phaseResults.totalUplift.toFixed(0)}% Total Uplift
-                  </div>
-                </div>
-              </div>
-
-              {/* ROI Insight */}
-              <div className="bg-white border border-gray-200 rounded-lg p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <DollarSign className="w-4 h-4 text-green-600" />
-                  <span className="font-medium text-green-800">ROI Insight</span>
-                </div>
-                <p className="text-green-700">
-                  Header navigation cleanup typically provides immediate 3-5%{" "}
-                  {isFormRelated ? "conversion rate" : "CTR"} improvement with minimal effort
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
-      {/* OpenAI Analysis Results */}
-      {isLoadingOpenAI && (
-        <Card className="bg-white border border-gray-200">
-          <CardContent className="py-8">
-            <div className="text-center">
-              <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-600" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">AI Analysis in Progress</h3>
-              <p className="text-gray-700">
-                Analyzing {deviceType} experience for conversion optimization recommendations...
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
-      {openAIError && (
-        <Card className="bg-white border border-gray-200">
-          <CardContent className="py-6">
-            <div className="flex items-center gap-3">
-              <AlertTriangle className="w-5 h-5 text-red-600" />
-              <div>
-                <h3 className="font-medium text-red-900">Analysis Error</h3>
-                <p className="text-sm text-red-700 mt-1">{openAIError}</p>
-              </div>
-            </div>
-            <Button onClick={triggerOpenAIAnalysis} className="mt-4 bg-transparent" variant="outline">
-              Retry Analysis
-            </Button>
-          </CardContent>
-        </Card>
-      )}
 
-      {/* Recommended Actions */}
-      {openAIAnalysis && openAIAnalysis.recommendedActions && (
+      {/* Internal CRO Recommendations */}
+      {croAnalysisResult && croAnalysisResult.recommendations && croAnalysisResult.recommendations.length > 0 && (
         <div className="space-y-4">
           {/* Header */}
           <div className="flex items-center gap-2 mb-6">
             <div className="w-8 h-8 bg-purple-600 rounded-lg flex items-center justify-center">
               <Target className="w-4 h-4 text-white" />
             </div>
-            <h3 className="text-xl font-semibold text-gray-900">Recommended Actions</h3>
-            <Badge variant="secondary" className="bg-purple-100 text-purple-700 border-purple-200">
-              Phased by Difficulty
-            </Badge>
-          </div>
-
-          {/* Phase 1 - Quick Wins */}
-          {openAIAnalysis.recommendedActions.phase1 && (
-            <Card className="bg-blue-50 border-blue-200">
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold">
-                      1
-                    </div>
-                    <span className="text-gray-900">{openAIAnalysis.recommendedActions.phase1.title}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge className="bg-blue-100 text-blue-700 border-blue-300">
-                      {openAIAnalysis.recommendedActions.phase1.expectedGain}
-                    </Badge>
-                    {openAIAnalysis.recommendedActions.phase1.estimatedTime && (
-                      <Badge variant="outline" className="text-xs">
-                        ⏱️ {openAIAnalysis.recommendedActions.phase1.estimatedTime}
-                      </Badge>
-                    )}
-                  </div>
-                </CardTitle>
-                {/* Team Owner and Time to Value */}
-                <div className="flex items-center gap-4 text-sm text-gray-600">
-                  {openAIAnalysis.recommendedActions.phase1.teamOwner && openAIAnalysis.recommendedActions.phase1.teamOwner.length > 0 && (
-                    <div className="flex items-center gap-1">
-                      <span className="font-medium">Team:</span>
-                      {openAIAnalysis.recommendedActions.phase1.teamOwner.map((owner, index) => (
-                        <Badge key={index} variant="secondary" className="text-xs bg-blue-100 text-blue-700">
-                          {owner}
-                        </Badge>
-                      ))}
-                    </div>
-                  )}
-                  {openAIAnalysis.recommendedActions.phase1.timeToValue && (
-                    <div className="flex items-center gap-1">
-                      <span className="font-medium">Time to Value:</span>
-                      <span>{openAIAnalysis.recommendedActions.phase1.timeToValue}</span>
-                    </div>
-                  )}
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {/* Handle multiple possible field names from AI response */}
-                {(openAIAnalysis.recommendedActions.phase1.elementsToFixOrRemove || 
-                  openAIAnalysis.recommendedActions.phase1.elementsToRemove || 
-                  openAIAnalysis.recommendedActions.phase1.actions) &&
-                  (openAIAnalysis.recommendedActions.phase1.elementsToFixOrRemove?.length > 0 || 
-                   openAIAnalysis.recommendedActions.phase1.elementsToRemove?.length > 0 ||
-                   openAIAnalysis.recommendedActions.phase1.actions?.length > 0) && (
-                    <div>
-                      <h4 className="font-medium text-gray-900 mb-2">
-                        {isFormRelated ? "Specific Form Fields & Elements to Fix/Remove:" : "Elements to Fix or Remove:"}
-                      </h4>
-                      <ul className="space-y-1">
-                        {(openAIAnalysis.recommendedActions.phase1.elementsToFixOrRemove || 
-                          openAIAnalysis.recommendedActions.phase1.elementsToRemove || 
-                          openAIAnalysis.recommendedActions.phase1.actions || []).map((element, index) => (
-                          <li key={index} className="flex items-center gap-2 text-sm text-gray-600">
-                            <ArrowRight className="w-3 h-3 text-blue-500" />"{element}"
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Phase 2 - Mid-Level Fixes */}
-          {openAIAnalysis.recommendedActions.phase2 && (
-            <Card className="bg-green-50 border-green-200">
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 bg-green-600 text-white rounded-full flex items-center justify-center text-sm font-bold">
-                      2
-                    </div>
-                    <span className="text-gray-900">{openAIAnalysis.recommendedActions.phase2.title}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge className="bg-green-100 text-green-700 border-green-300">
-                      {openAIAnalysis.recommendedActions.phase2.expectedGain}
-                    </Badge>
-                    {openAIAnalysis.recommendedActions.phase2.estimatedTime && (
-                      <Badge variant="outline" className="text-xs">
-                        ⏱️ {openAIAnalysis.recommendedActions.phase2.estimatedTime}
-                      </Badge>
-                    )}
-                  </div>
-                </CardTitle>
-                {/* Team Owner and Time to Value */}
-                <div className="flex items-center gap-4 text-sm text-gray-600">
-                  {openAIAnalysis.recommendedActions.phase2.teamOwner && openAIAnalysis.recommendedActions.phase2.teamOwner.length > 0 && (
-                    <div className="flex items-center gap-1">
-                      <span className="font-medium">Team:</span>
-                      {openAIAnalysis.recommendedActions.phase2.teamOwner.map((owner, index) => (
-                        <Badge key={index} variant="secondary" className="text-xs bg-green-100 text-green-700">
-                          {owner}
-                        </Badge>
-                      ))}
-                    </div>
-                  )}
-                  {openAIAnalysis.recommendedActions.phase2.timeToValue && (
-                    <div className="flex items-center gap-1">
-                      <span className="font-medium">Time to Value:</span>
-                      <span>{openAIAnalysis.recommendedActions.phase2.timeToValue}</span>
-                    </div>
-                  )}
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {/* Handle multiple possible field names from AI response */}
-                {(openAIAnalysis.recommendedActions.phase2.elementsToFixOrImprove || 
-                  openAIAnalysis.recommendedActions.phase2.elementsToRemove ||
-                  openAIAnalysis.recommendedActions.phase2.actions) &&
-                  (openAIAnalysis.recommendedActions.phase2.elementsToFixOrImprove?.length > 0 || 
-                   openAIAnalysis.recommendedActions.phase2.elementsToRemove?.length > 0 ||
-                   openAIAnalysis.recommendedActions.phase2.actions?.length > 0) && (
-                    <div>
-                      <h4 className="font-medium text-gray-900 mb-2">
-                        {isFormRelated ? "Additional Form Elements to Fix/Improve:" : "Elements to Fix or Improve:"}
-                      </h4>
-                      <ul className="space-y-1">
-                        {(openAIAnalysis.recommendedActions.phase2.elementsToFixOrImprove || 
-                          openAIAnalysis.recommendedActions.phase2.elementsToRemove ||
-                          openAIAnalysis.recommendedActions.phase2.actions || []).map((element, index) => (
-                          <li key={index} className="flex items-center gap-2 text-sm text-gray-600">
-                            <ArrowRight className="w-3 h-3 text-green-500" />"{element}"
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Phase 3 - Structural Improvements */}
-          {openAIAnalysis.recommendedActions.phase3 && (
-            <Card className="bg-purple-50 border-purple-200">
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 bg-purple-600 text-white rounded-full flex items-center justify-center text-sm font-bold">
-                      3
-                    </div>
-                    <span className="text-gray-900">{openAIAnalysis.recommendedActions.phase3.title}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge className="bg-purple-100 text-purple-700 border-purple-300">
-                      {openAIAnalysis.recommendedActions.phase3.expectedGain}
-                    </Badge>
-                    {openAIAnalysis.recommendedActions.phase3.estimatedTime && (
-                      <Badge variant="outline" className="text-xs">
-                        ⏱️ {openAIAnalysis.recommendedActions.phase3.estimatedTime}
-                      </Badge>
-                    )}
-                  </div>
-                </CardTitle>
-                {/* Team Owner and Time to Value */}
-                <div className="flex items-center gap-4 text-sm text-gray-600">
-                  {openAIAnalysis.recommendedActions.phase3.teamOwner && openAIAnalysis.recommendedActions.phase3.teamOwner.length > 0 && (
-                    <div className="flex items-center gap-1">
-                      <span className="font-medium">Team:</span>
-                      {openAIAnalysis.recommendedActions.phase3.teamOwner.map((owner, index) => (
-                        <Badge key={index} variant="secondary" className="text-xs bg-purple-100 text-purple-700">
-                          {owner}
-                        </Badge>
-                      ))}
-                    </div>
-                  )}
-                  {openAIAnalysis.recommendedActions.phase3.timeToValue && (
-                    <div className="flex items-center gap-1">
-                      <span className="font-medium">Time to Value:</span>
-                      <span>{openAIAnalysis.recommendedActions.phase3.timeToValue}</span>
-                    </div>
-                  )}
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {/* Handle multiple possible field names from AI response */}
-                {(openAIAnalysis.recommendedActions.phase3.changes ||
-                  openAIAnalysis.recommendedActions.phase3.actions) &&
-                  (openAIAnalysis.recommendedActions.phase3.changes?.length > 0 ||
-                   openAIAnalysis.recommendedActions.phase3.actions?.length > 0) && (
-                    <div>
-                      <h4 className="font-medium text-gray-900 mb-2">Changes to Implement:</h4>
-                      <ul className="space-y-1">
-                        {(openAIAnalysis.recommendedActions.phase3.changes ||
-                          openAIAnalysis.recommendedActions.phase3.actions || []).map((change, index) => (
-                          <li key={index} className="flex items-center gap-2 text-sm text-gray-600">
-                            <ArrowRight className="w-3 h-3 text-purple-500" />
-                            {change}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Highlights */}
-          {openAIAnalysis.highlights && openAIAnalysis.highlights.length > 0 && (
-            <Card className="bg-yellow-50 border-yellow-200">
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2 text-gray-900">
-                  <AlertTriangle className="w-5 h-5 text-yellow-600" />
-                  Key Highlights & Insights
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {openAIAnalysis.highlights.map((highlight, index) => (
-                    <div key={index} className="flex items-start gap-3">
-                      <div className="w-6 h-6 bg-yellow-100 rounded-full flex items-center justify-center text-sm font-medium text-yellow-600 flex-shrink-0 mt-0.5">
-                        ⚡
-                      </div>
-                      <p className="text-sm text-gray-700">{highlight}</p>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Friction Points */}
-          {openAIAnalysis.frictionPoints && openAIAnalysis.frictionPoints.length > 0 && (
-            <Card className="bg-red-50 border-red-200">
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2 text-gray-900">
-                  <AlertTriangle className="w-5 h-5 text-red-600" />
-                  Identified Friction Points
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {openAIAnalysis.frictionPoints.map((point, index) => (
-                    <div key={index} className="border-l-4 border-red-300 pl-4">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="font-medium text-red-800">{point.element}</span>
-                        <Badge variant="outline" className="text-xs bg-red-100 text-red-700 border-red-300">
-                          {point.type}
-                        </Badge>
-                      </div>
-                      <p className="text-sm text-gray-700 mb-1">{point.problem}</p>
-                      <p className="text-xs text-red-600 font-medium">Impact: {point.impact}</p>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* ROI Insight */}
-          <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <DollarSign className="w-4 h-4 text-green-600" />
-              <span className="font-medium text-green-800">ROI Insight</span>
+                                    <div>
+              <h3 className="text-xl font-semibold text-gray-900">CRO Analysis Report</h3>
+              <p className="text-sm text-gray-600">
+                {croAnalysisResult.summary.totalRecommendations} recommendations • 
+                {croAnalysisResult.summary.estimatedUpliftRange.min}-{croAnalysisResult.summary.estimatedUpliftRange.max}% estimated uplift
+              </p>
             </div>
-            <p className="text-green-700">
-              {isFormRelated
-                ? "Form field reduction provides the highest impact for form-based CTAs - reducing from 7 to 3 fields can increase conversions by 15-25%"
-                : "Header navigation cleanup typically provides immediate 3-5% CTR improvement with minimal effort"}
-            </p>
           </div>
 
-          {/* Next Steps */}
-          {openAIAnalysis.nextSteps && openAIAnalysis.nextSteps.length > 0 && (
-            <Card className="bg-white border border-gray-200">
+          {/* Summary Stats */}
+          <div className="grid grid-cols-3 gap-4 mb-6">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
+              <div className="text-2xl font-bold text-blue-600">{croAnalysisResult.summary.quickWins}</div>
+              <div className="text-sm text-blue-700">Quick Wins</div>
+              <div className="text-xs text-blue-600">1-2 hrs • +3-5%</div>
+                    </div>
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
+              <div className="text-2xl font-bold text-green-600">{croAnalysisResult.summary.formFixes}</div>
+              <div className="text-sm text-green-700">Form Fixes</div>
+              <div className="text-xs text-green-600">3-5 hrs • +5-8%</div>
+                  </div>
+            <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 text-center">
+              <div className="text-2xl font-bold text-purple-600">{croAnalysisResult.summary.structuralChanges}</div>
+              <div className="text-sm text-purple-700">Structural</div>
+              <div className="text-xs text-purple-600">1-2 days • +8-12%</div>
+                  </div>
+                    </div>
+
+          {/* Internal CRO Recommendations by Category */}
+          {['Quick Wins', 'Form Fixes', 'Structural Changes', 'Key Highlights', 'Friction Points', 'ROI Insights', 'Next Steps'].map((category: string) => {
+            const categoryRecommendations = croAnalysisResult.recommendations.filter((rec: any) => rec.category === category)
+            if (categoryRecommendations.length === 0) return null
+
+            const getCategoryConfig = (cat: string) => {
+              switch (cat) {
+                case 'Quick Wins': return { color: 'blue', icon: '⚡', bgClass: 'bg-blue-50 border-blue-200', titleClass: 'text-blue-900', badgeClass: 'bg-blue-100 text-blue-700 border-blue-300', iconClass: 'text-blue-600' }
+                case 'Form Fixes': return { color: 'green', icon: '📝', bgClass: 'bg-green-50 border-green-200', titleClass: 'text-green-900', badgeClass: 'bg-green-100 text-green-700 border-green-300', iconClass: 'text-green-600' }
+                case 'Structural Changes': return { color: 'purple', icon: '🏗️', bgClass: 'bg-purple-50 border-purple-200', titleClass: 'text-purple-900', badgeClass: 'bg-purple-100 text-purple-700 border-purple-300', iconClass: 'text-purple-600' }
+                case 'Key Highlights': return { color: 'yellow', icon: '⚡', bgClass: 'bg-yellow-50 border-yellow-200', titleClass: 'text-yellow-900', badgeClass: 'bg-yellow-100 text-yellow-700 border-yellow-300', iconClass: 'text-yellow-600' }
+                case 'Friction Points': return { color: 'red', icon: '⚠️', bgClass: 'bg-red-50 border-red-200', titleClass: 'text-red-900', badgeClass: 'bg-red-100 text-red-700 border-red-300', iconClass: 'text-red-600' }
+                case 'ROI Insights': return { color: 'emerald', icon: '💰', bgClass: 'bg-emerald-50 border-emerald-200', titleClass: 'text-emerald-900', badgeClass: 'bg-emerald-100 text-emerald-700 border-emerald-300', iconClass: 'text-emerald-600' }
+                case 'Next Steps': return { color: 'indigo', icon: '📋', bgClass: 'bg-indigo-50 border-indigo-200', titleClass: 'text-indigo-900', badgeClass: 'bg-indigo-100 text-indigo-700 border-indigo-300', iconClass: 'text-indigo-600' }
+                default: return { color: 'gray', icon: '•', bgClass: 'bg-gray-50 border-gray-200', titleClass: 'text-gray-900', badgeClass: 'bg-gray-100 text-gray-700 border-gray-300', iconClass: 'text-gray-600' }
+              }
+            }
+
+            const config = getCategoryConfig(category)
+
+            return (
+              <Card key={category} className={config.bgClass}>
               <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2 text-gray-900">
-                  <CheckCircle className="w-5 h-5 text-blue-600" />
-                  Next Steps
+                  <CardTitle className={`text-lg flex items-center gap-2 ${config.titleClass}`}>
+                    <span className="text-lg">{config.icon}</span>
+                    {category}
+                    <Badge variant="outline" className={`text-xs ${config.badgeClass}`}>
+                      {categoryRecommendations.length}
+                    </Badge>
                 </CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {openAIAnalysis.nextSteps.map((step, index) => (
-                    <div key={index} className="flex items-start gap-3">
-                      <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center text-sm font-medium text-blue-600 flex-shrink-0 mt-0.5">
-                        {index + 1}
+                <CardContent>
+                  <div className="space-y-3">
+                    {categoryRecommendations.map((rec: any, index: number) => (
+                      <div key={rec.id} className="border-l-4 border-current pl-4 py-2">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="font-medium text-gray-900">{rec.title}</span>
+                              {rec.effort && (
+                      <Badge variant="outline" className="text-xs">
+                                  ⏱️ {rec.effort}
+                      </Badge>
+                    )}
+                              {rec.impact && (
+                                <Badge className={config.badgeClass}>
+                                  {rec.impact}
+                        </Badge>
+                  )}
+                    </div>
+                            <p className="text-sm text-gray-700 mb-1">{rec.description}</p>
+                            {rec.confidence > 0 && (
+                              <div className="flex items-center gap-2 text-xs text-gray-500">
+                                <span>Confidence: {rec.confidence}%</span>
+                                {rec.estimatedUplift.min > 0 && (
+                                  <span>• Impact: {rec.estimatedUplift.min}-{rec.estimatedUplift.max}%</span>
+                                )}
+                    </div>
+                  )}
                       </div>
-                      <p className="text-sm text-gray-700">{step}</p>
+                    </div>
                     </div>
                   ))}
                 </div>
               </CardContent>
             </Card>
-          )}
+            )
+          })}
+
+          {/* Analysis Metadata */}
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-sm font-medium text-gray-700">Analysis Details</span>
+                      </div>
+                                    <div className="grid grid-cols-2 gap-4 text-sm text-gray-600">
+              <div>
+                <span className="font-medium">Device:</span> {croAnalysisResult.metadata.deviceType}
+                    </div>
+              <div>
+                <span className="font-medium">Version:</span> {croAnalysisResult.metadata.analysisVersion}
+                </div>
+              <div>
+                <span className="font-medium">Analyzed:</span> {new Date(croAnalysisResult.metadata.analyzedAt).toLocaleString()}
+            </div>
+              <div>
+                <span className="font-medium">URL:</span> {croAnalysisResult.metadata.url}
+          </div>
+                      </div>
+                    </div>
         </div>
       )}
 
-      {/* Manual Trigger Button (if auto-trigger failed and no cache) */}
-      {!openAIAnalysis && !isLoadingOpenAI && !openAIError && (
-        <Card className="bg-white border border-gray-200">
+      {/* Manual Trigger Button - No longer needed with internal CRO */}
+      {croAnalysisResult && croAnalysisResult.recommendations && croAnalysisResult.recommendations.length === 0 && (
+        <Card className="bg-yellow-50 border border-yellow-200">
           <CardContent className="py-6 text-center">
-            <Button onClick={triggerOpenAIAnalysis} className="bg-blue-600 hover:bg-blue-700 text-white">
-              <Brain className="w-4 h-4 mr-2 text-white" />
-              Generate AI Analysis
-            </Button>
-            <p className="text-sm text-gray-700 mt-2">
-              Analyze {deviceType} experience for conversion optimization recommendations
+            <p className="text-sm text-yellow-700">
+              No CRO recommendations generated for this page analysis.
             </p>
           </CardContent>
         </Card>
       )}
+
+
     </div>
   )
 }

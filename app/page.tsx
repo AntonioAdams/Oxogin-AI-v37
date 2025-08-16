@@ -38,6 +38,7 @@ import { compressScreenshotClient } from "@/lib/utils/client-compression"
 import type { CaptureResult, CTAInsight, MatchedElement, DebugMatch, ClickPredictionResult } from "./page/types"
 import { Globe } from "lucide-react"
 import { analysisStorage } from "@/lib/analysis/storage"
+import { performanceTracker, trackCapture, trackAnalysis, trackAPICall, logPerformanceWarning, logPerformanceInfo } from "@/lib/utils/performance-tracker"
 
 export default function OxoginAI() {
   // Move ALL useState to the very top to prevent initialization errors
@@ -693,40 +694,44 @@ export default function OxoginAI() {
 
   // Single capture function that handles both desktop and mobile
   const captureWebsite = useCallback(
-    async (isMobile = false) => {
+    async () => {
       if (!url.trim()) {
         return
       }
 
-      // Track capture attempt
+      // 🔍 PERFORMANCE: Start tracking the entire session
+      const sessionId = performanceTracker.startSession(url)
+      const sessionEndTracker = trackAnalysis('both', 'Full Analysis Session')
+
+      // Track parallel capture attempt
       trackEvent('Capture Started', {
-        device: isMobile ? 'mobile' : 'desktop',
+        device: 'parallel',
         url: url,
         hasCredits: true, // Credit checks now handled by API
-        creditBalance: 10 // Default value - actual balance managed by global store
+        creditBalance: 10, // Default value - actual balance managed by global store
+        sessionId
       })
 
       // Credit checks now handled by global store and API
 
-      // Only start full loading sequence on desktop capture (the initial one)
-      if (!isMobile) {
-        setIsFullAnalysisLoading(true)
-        setLoadingProgress(0)
-        setLoadingStage("Initializing comprehensive analysis...")
-        setCompletedSteps({
-          desktopCapture: false,
-          desktopAnalysis: false,
-          desktopOpenAI: false,
-          mobileCapture: false,
-          mobileAnalysis: false,
-          mobileOpenAI: false,
-          finalizing: false,
-        })
+      // Start full loading sequence for parallel capture
+      setIsFullAnalysisLoading(true)
+      setLoadingProgress(0)
+      setLoadingStage("Initializing comprehensive parallel analysis...")
+      setCompletedSteps({
+        desktopCapture: false,
+        desktopAnalysis: false,
+        desktopOpenAI: false,
+        mobileCapture: false,
+        mobileAnalysis: false,
+        mobileOpenAI: false,
+        finalizing: false,
+      })
 
-        // Reset credits deducted flag for new analysis
-        setCreditsDeductedForCurrentAnalysis(false)
+      // Reset credits deducted flag for new analysis
+      setCreditsDeductedForCurrentAnalysis(false)
 
-        // Clear all state
+      // Clear all state
         setDesktopCaptureResult(null)
         setDesktopAnalysisResult(null)
         setDesktopMatchedElement(null)
@@ -748,33 +753,34 @@ export default function OxoginAI() {
         setMobilePrimaryCTAPrediction(null)
         setMobileOpenAIResult(null)
         setMobileCroAnalysisResult(null)
-      }
 
       setIsCapturing(true)
-      setCapturingDevice(isMobile ? "mobile" : "desktop")
+      setCapturingDevice("parallel")
 
       try {
+        // 🔍 PERFORMANCE: Track API call
+        const apiCallTracker = trackAPICall('/api/capture', 'both')
+        
         const userId = getCurrentUserId()
 
         if (process.env.NODE_ENV === "development") {
-          console.log(`🚀 Starting ${isMobile ? "mobile" : "desktop"} capture with userId:`, userId)
+          console.log(`🚀 Starting parallel capture with userId:`, userId)
         }
 
-        if (!isMobile) {
-          setLoadingProgress(5)
-          setLoadingStage("Capturing desktop screenshot...")
-        } else {
-          setLoadingProgress(40)
-          setLoadingStage("Capturing mobile screenshot...")
-        }
+        setLoadingProgress(5)
+        setLoadingStage("Capturing desktop + mobile screenshots...")
 
+        const apiStartTime = Date.now()
         const response = await fetch("/api/capture", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ url, isMobile, userId }),
+          body: JSON.stringify({ url, userId }),
         })
+        
+        const apiDuration = Date.now() - apiStartTime
+        logPerformanceInfo(`API call completed`, apiDuration, { endpoint: '/api/capture', status: response.status })
 
         if (!response.ok) {
           let errorMessage = `HTTP ${response.status}: ${response.statusText}`
@@ -798,30 +804,58 @@ export default function OxoginAI() {
           throw new Error(errorMessage)
         }
 
-        if (!isMobile) {
-          setLoadingProgress(15)
-          setLoadingStage("Processing desktop data...")
-        } else {
-          setLoadingProgress(50)
-          setLoadingStage("Processing mobile data...")
-        }
+        // 🔍 PERFORMANCE: End API call tracking
+        apiCallTracker()
+        
+        setLoadingProgress(15)
+        setLoadingStage("Processing parallel data...")
 
+        // 🔍 PERFORMANCE: Track data processing
+        const dataProcessingTracker = trackAnalysis('both', 'Data Processing')
+        const jsonStartTime = Date.now()
+        
         let data
         try {
           data = await response.json()
+          const jsonDuration = Date.now() - jsonStartTime
+          logPerformanceInfo(`JSON parsing completed`, jsonDuration, { responseSize: response.headers.get('content-length') })
         } catch (jsonError) {
+          const jsonDuration = Date.now() - jsonStartTime
+          logPerformanceWarning(`JSON parsing failed`, 1000, jsonDuration, { error: jsonError })
           if (process.env.NODE_ENV === "development") {
             console.error("Failed to parse JSON response:", jsonError)
           }
           throw new Error("Server returned invalid JSON response")
         }
 
-        if (!data || !data.screenshot || !data.domData) {
+        if (!data || !data.desktop || !data.mobile) {
           if (process.env.NODE_ENV === "development") {
-            console.error("Invalid response structure:", data)
+            console.error("Invalid parallel response structure:", data)
           }
-          throw new Error("Invalid response structure from server")
+          throw new Error("Invalid parallel response structure from server")
         }
+
+        // Extract desktop and mobile data from parallel response
+        const desktopData = data.desktop.captureResult
+        const mobileData = data.mobile.captureResult
+        const desktopInternalCRO = data.desktop.internalCROAnalysis
+        const mobileInternalCRO = data.mobile.internalCROAnalysis
+
+        // 🔍 DEBUG: Log when desktop image becomes available
+        console.log(`🔍 [PAGE] 📸 Desktop image available immediately!`, {
+          hasDesktopData: !!desktopData,
+          hasDesktopScreenshot: !!desktopData?.screenshot,
+          screenshotSize: desktopData?.screenshot ? Math.round(desktopData.screenshot.length / 1024) + 'KB' : 'N/A',
+          timestamp: new Date().toISOString()
+        })
+        
+        // 🔍 DEBUG: Log when mobile image becomes available
+        console.log(`🔍 [PAGE] 📱 Mobile image available immediately!`, {
+          hasMobileData: !!mobileData,
+          hasMobileScreenshot: !!mobileData?.screenshot,
+          screenshotSize: mobileData?.screenshot ? Math.round(mobileData.screenshot.length / 1024) + 'KB' : 'N/A',
+          timestamp: new Date().toISOString()
+        })
 
         // Trigger credit refresh after successful capture
         if (process.env.NODE_ENV === "development") {
@@ -829,37 +863,111 @@ export default function OxoginAI() {
         }
         triggerCreditRefresh()
 
-        // Track successful capture
+        // Track successful parallel capture
         trackEvent('Capture Completed', {
-          device: isMobile ? 'mobile' : 'desktop',
+          device: 'parallel',
           url: url,
-          hasFormFields: data.domData.formFields?.length > 0,
-          formFieldsCount: data.domData.formFields?.length || 0,
-          buttonsCount: data.domData.buttons?.length || 0,
-          formsCount: data.domData.forms?.length || 0,
+          hasFormFields: desktopData.domData.formFields?.length > 0,
+          formFieldsCount: desktopData.domData.formFields?.length || 0,
+          buttonsCount: desktopData.domData.buttons?.length || 0,
+          formsCount: desktopData.domData.forms?.length || 0,
           creditsRemaining: data.creditsRemaining,
-          pageTitle: data.domData.title
+          pageTitle: desktopData.domData.title
         })
 
         // Only log capture success in development
         if (process.env.NODE_ENV === "development") {
-          console.log(`✅ ${isMobile ? "mobile" : "desktop"} capture successful:`, {
-            title: data.domData.title,
-            formFields: data.domData.formFields?.length || 0,
-            buttons: data.domData.buttons?.length || 0,
-            forms: data.domData.forms?.length || 0,
+          console.log(`✅ Parallel capture successful:`, {
+            desktop: {
+              title: desktopData.domData.title,
+              formFields: desktopData.domData.formFields?.length || 0,
+              buttons: desktopData.domData.buttons?.length || 0,
+              forms: desktopData.domData.forms?.length || 0,
+              hasCRO: !!desktopInternalCRO
+            },
+            mobile: {
+              title: mobileData.domData.title,
+              formFields: mobileData.domData.formFields?.length || 0,
+              buttons: mobileData.domData.buttons?.length || 0,
+              forms: mobileData.domData.forms?.length || 0,
+              hasCRO: !!mobileInternalCRO
+            },
             creditsRemaining: data.creditsRemaining,
           })
         }
 
-        if (isMobile) {
-          setMobileCaptureResult(data)
-          setCompletedSteps((prev) => ({ ...prev, mobileCapture: true }))
-        } else {
-          setDesktopCaptureResult(data)
-          setCompletedSteps((prev) => ({ ...prev, desktopCapture: true }))
-          setActiveTab("desktop")
+        // Set both desktop and mobile results from parallel capture
+        setDesktopCaptureResult(desktopData)
+        setMobileCaptureResult(mobileData)
+        
+        // CRITICAL: Set the internal CRO analysis results
+        console.log("🧪 TESTING - Internal CRO Analysis Data:", {
+          desktop: {
+            hasData: !!desktopInternalCRO,
+            recommendations: desktopInternalCRO?.recommendations?.length || 0,
+            summary: desktopInternalCRO?.summary,
+            keys: desktopInternalCRO ? Object.keys(desktopInternalCRO) : []
+          },
+          mobile: {
+            hasData: !!mobileInternalCRO,
+            recommendations: mobileInternalCRO?.recommendations?.length || 0,
+            summary: mobileInternalCRO?.summary,
+            keys: mobileInternalCRO ? Object.keys(mobileInternalCRO) : []
+          }
+        })
+        setDesktopCroAnalysisResult(desktopInternalCRO)
+        setMobileCroAnalysisResult(mobileInternalCRO)
+        
+        // 🔍 DEBUG: Confirm state was set
+        console.log("🔍 Page.tsx - CRO State Set:", {
+          desktopInternalCRO: !!desktopInternalCRO,
+          mobileInternalCRO: !!mobileInternalCRO,
+          desktopRecsCount: desktopInternalCRO?.recommendations?.length || 0,
+          mobileRecsCount: mobileInternalCRO?.recommendations?.length || 0
+        })
+        
+        // Extract and set click predictions from parallel response
+        setDesktopClickPredictions(data.desktop.clickPredictions || [])
+        setMobileClickPredictions(data.mobile.clickPredictions || [])
+        
+        // Extract and set primary CTA predictions
+        setDesktopPrimaryCTAPrediction(data.desktop.primaryCTAPrediction || null)
+        setMobilePrimaryCTAPrediction(data.mobile.primaryCTAPrediction || null)
+        
+        // Extract and set CTA insights from unified analysis
+        setDesktopAnalysisResult(data.desktop.ctaInsight || null)
+        setMobileAnalysisResult(data.mobile.ctaInsight || null)
+        
+        // Create matched elements for CRO analysis
+        if (data.desktop.primaryCTAPrediction) {
+          const desktopMatch = {
+            elementId: data.desktop.primaryCTAPrediction.elementId,
+            text: data.desktop.primaryCTAPrediction.text,
+            isFormRelated: data.desktop.primaryCTAPrediction.isFormRelated || false,
+            coordinates: data.desktop.primaryCTAPrediction.coordinates || { x: 0, y: 0, width: 0, height: 0 },
+            confidence: data.desktop.primaryCTAPrediction.confidence || 0.8
+          }
+          setDesktopMatchedElement(desktopMatch)
         }
+        
+        if (data.mobile.primaryCTAPrediction) {
+          const mobileMatch = {
+            elementId: data.mobile.primaryCTAPrediction.elementId,
+            text: data.mobile.primaryCTAPrediction.text,
+            isFormRelated: data.mobile.primaryCTAPrediction.isFormRelated || false,
+            coordinates: data.mobile.primaryCTAPrediction.coordinates || { x: 0, y: 0, width: 0, height: 0 },
+            confidence: data.mobile.primaryCTAPrediction.confidence || 0.8
+          }
+          setMobileMatchedElement(mobileMatch)
+        }
+        
+        // Set completion state and default to desktop view
+        setCompletedSteps((prev) => ({ 
+          ...prev, 
+          desktopCapture: true, 
+          mobileCapture: true 
+        }))
+        setActiveTab("desktop")
 
         // Auto-analyze CTA after successful capture
         const autoAnalyzeCTA = async (attempt = 1) => {
@@ -1084,21 +1192,10 @@ export default function OxoginAI() {
                 console.log("🚀 Auto-triggering mobile capture after desktop completion...")
               }
 
-              // Start mobile capture in background after a short delay
-              setTimeout(async () => {
-                try {
-                  if (process.env.NODE_ENV === "development") {
-                    console.log("📱 Starting background mobile capture...")
-                  }
-                  await captureWebsite(true) // Capture mobile version
-                } catch (error) {
-                  if (process.env.NODE_ENV === "development") {
-                    console.error("❌ Auto mobile capture failed:", error)
-                  }
-                }
-              }, 1000) // 1 second delay
+              // Parallel capture already completed both desktop and mobile
+              console.log("✅ Parallel capture completed - both desktop and mobile data available")
             } else {
-              // Mobile analysis complete - everything is done
+              // This branch is no longer used since we do parallel capture
               setLoadingProgress(90)
               setLoadingStage("Finalizing comprehensive analysis...")
               setCompletedSteps((prev) => ({ ...prev, finalizing: true }))
@@ -1112,6 +1209,32 @@ export default function OxoginAI() {
 
                 // Hide loading after completion
                 setTimeout(() => {
+                  // 🔍 PERFORMANCE: End session tracking
+                  sessionEndTracker()
+                  const session = performanceTracker.endSession()
+                  
+                  // 🔍 PERFORMANCE: Log final session summary
+                  if (session) {
+                    logPerformanceInfo(`Complete analysis session finished`, session.totalDuration || 0, {
+                      sessionId: session.sessionId,
+                      url: session.url,
+                      totalSteps: session.summary.totalSteps,
+                      completedSteps: session.summary.completedSteps,
+                      slowestStep: session.summary.slowestStep?.name,
+                      averageStepTime: session.summary.averageStepTime
+                    })
+                    
+                    // Performance warnings for slow steps
+                    if (session.summary.slowestStep && session.summary.slowestStep.duration && session.summary.slowestStep.duration > 10000) {
+                      logPerformanceWarning(
+                        `Slowest step exceeded 10 seconds: ${session.summary.slowestStep.name}`,
+                        10000,
+                        session.summary.slowestStep.duration,
+                        { sessionId: session.sessionId }
+                      )
+                    }
+                  }
+                  
                   setIsFullAnalysisLoading(false)
                   setLoadingProgress(0)
                   setLoadingStage("")
@@ -1147,28 +1270,44 @@ export default function OxoginAI() {
         // Start auto-analysis
         autoAnalyzeCTA()
       } catch (error) {
+        // 🔍 PERFORMANCE: Track error and end session
+        const totalErrorTime = Date.now() - (performanceTracker.getCurrentSession()?.startTime || Date.now())
+        
+        performanceTracker.logQuickMetric(
+          'Capture Error', 
+          'analysis', 
+          totalErrorTime, 
+          'both', 
+          { 
+            error: (error as Error).message,
+            errorType: (error as Error).name,
+            progress: loadingProgress,
+            stage: loadingStage
+          }
+        )
+        
+        sessionEndTracker()
+        performanceTracker.endSession()
+        
         if (process.env.NODE_ENV === "development") {
           console.error("Error capturing website:", error)
         }
         
         // Show notification for capture failure
-        const deviceType = isMobile ? "mobile" : "desktop"
         const errorType = error instanceof Error && error.message.includes("timeout") ? "timeout" : "failure"
         
         setNotificationError({
           type: errorType,
-          deviceType: deviceType as "desktop" | "mobile" | "both",
+          deviceType: "both",
           progress: loadingProgress,
           stage: loadingStage
         })
         setShowCaptureNotification(true)
         
         // Hide loading on error
-        if (!isMobile) {
-          setIsFullAnalysisLoading(false)
-          setLoadingProgress(0)
-          setLoadingStage("")
-        }
+        setIsFullAnalysisLoading(false)
+        setLoadingProgress(0)
+        setLoadingStage("")
       } finally {
         setIsCapturing(false)
         setCapturingDevice(null)
@@ -1705,6 +1844,7 @@ export default function OxoginAI() {
                         showTooltip={desktopShowTooltip}
                         primaryCTAPrediction={desktopPrimaryCTAPrediction}
                         analysisResult={desktopAnalysisResult}
+                        croAnalysisResult={desktopCroAnalysisResult}
                         isAnalyzing={isAnalyzing}
                         onImageLoad={(img) => handleImageLoad(img, false)}
                         onAnalyzeCTA={analyzeCTA}
@@ -1755,6 +1895,7 @@ export default function OxoginAI() {
                         showTooltip={mobileShowTooltip}
                         primaryCTAPrediction={mobilePrimaryCTAPrediction}
                         analysisResult={mobileAnalysisResult}
+                        croAnalysisResult={mobileCroAnalysisResult}
                         isAnalyzing={isAnalyzing}
                         onImageLoad={(img) => handleImageLoad(img, true)}
                         onAnalyzeCTA={analyzeCTA}

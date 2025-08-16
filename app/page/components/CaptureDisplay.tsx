@@ -111,9 +111,19 @@ export function CaptureDisplay({
   const [showFormBoundaries, setShowFormBoundaries] = useState(true)
   const imageRef = useRef<HTMLImageElement>(null)
 
-  // Handle image load
+  // Handle image load with debugging
   useEffect(() => {
-    if (imageRef.current && imageRef.current.complete) {
+    // 🔍 DEBUG: Log image load state
+    console.log(`🔍 [CAPTURE-DISPLAY] Image load check:`, {
+      hasImageRef: !!imageRef.current,
+      imageComplete: imageRef.current?.complete,
+      hasScreenshot: !!captureResult?.screenshot,
+      screenshotSize: captureResult?.screenshot ? Math.round(captureResult.screenshot.length / 1024) + 'KB' : 'N/A',
+      timestamp: new Date().toISOString()
+    })
+    
+    if (imageRef.current && imageRef.current.complete && captureResult?.screenshot) {
+      console.log(`🔍 [CAPTURE-DISPLAY] 🎉 Image already loaded, calling onImageLoad immediately!`)
       onImageLoad(imageRef.current)
     }
   }, [captureResult?.screenshot, onImageLoad])
@@ -134,6 +144,14 @@ export function CaptureDisplay({
 
   const handleImageLoad = () => {
     if (imageRef.current) {
+      // 🔍 DEBUG: Log when image onLoad event fires
+      console.log(`🔍 [CAPTURE-DISPLAY] 📸 Image onLoad event fired!`, {
+        naturalWidth: imageRef.current.naturalWidth,
+        naturalHeight: imageRef.current.naturalHeight,
+        displayWidth: imageRef.current.width,
+        displayHeight: imageRef.current.height,
+        timestamp: new Date().toISOString()
+      })
       onImageLoad(imageRef.current)
     }
   }
@@ -419,17 +437,35 @@ export function CaptureDisplay({
         </div>
       )}
 
-      {/* CRO Assistant - Single instance without duplication - REMOVED deviceType prop */}
-      {primaryCTAPrediction && updatedMatchedElement && (
-        <div id="cro-results">
-          <CROAssistantIntegrated
+      {/* CRO Assistant - Enhanced to show when CRO analysis is available */}
+      {((primaryCTAPrediction && updatedMatchedElement) || croAnalysisResult) ? (
+          <div id="cro-results">
+            <CROAssistantIntegrated
             captureResult={captureResult}
             clickPredictions={safeClickPredictions}
-            primaryCTAId={primaryCTAPrediction?.elementId}
+            primaryCTAId={primaryCTAPrediction?.elementId || "fallback-cta"}
             isAnalyzing={false} // Analysis is already complete
             onAnalyze={onAnalyzeCTA}
-            primaryCTAPrediction={primaryCTAPrediction}
-            matchedElement={updatedMatchedElement}
+            primaryCTAPrediction={primaryCTAPrediction || {
+              elementId: "fallback-cta",
+              text: "Primary CTA",
+              elementType: "button",
+              coordinates: { x: 0, y: 0, width: 0, height: 0 },
+              ctr: 0.032,
+              clickShare: 0.15,
+              estimatedClicks: 100,
+              wastedClicks: 0,
+              wastedSpend: 0,
+              confidence: "medium" as const,
+              riskFactors: []
+            }}
+            matchedElement={updatedMatchedElement || {
+              text: "Primary CTA",
+              coordinates: { x: 0, y: 0 },
+              confidence: 0.8,
+              reasoning: "Fallback for CRO analysis display",
+              isFormRelated: false // Default to non-form CTA for fallback
+            }}
             imageSize={safeImageSize}
             allDOMElements={domElementsForCRO}
             preLoadedAnalysis={true} // New prop to indicate analysis is ready
@@ -438,8 +474,9 @@ export function CaptureDisplay({
             openAIResult={openAIResult} // Pass OpenAI result
             croAnalysisResult={croAnalysisResult} // Pass CRO analysis result
           />
-        </div>
-      )}
+                  </div>
+        ) : null
+      }
 
       {/* Removed the tabs section completely - no more Analysis Results, Statistics, or DOM Analysis tabs */}
     </div>

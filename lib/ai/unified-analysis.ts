@@ -100,7 +100,6 @@ export interface PredictionsResult {
 
 export interface UnifiedAnalysisResult {
   cta: CTAResult
-  cro: CROResult
   predictions: PredictionsResult
   metadata: {
     deviceType: string
@@ -112,11 +111,21 @@ export interface UnifiedAnalysisResult {
 }
 
 /**
- * Performs unified AI analysis combining CTA, CRO, and click predictions
- * This reduces 3 separate OpenAI calls to 1, saving 60-70% of AI processing time
+ * Performs streamlined AI analysis combining CTA identification and click predictions
+ * CRO analysis is now handled by internal engine. This reduces OpenAI API calls and costs.
  */
 export async function performUnifiedAnalysis(options: UnifiedAnalysisOptions): Promise<UnifiedAnalysisResult> {
   const startTime = Date.now()
+  
+  // Enhanced debug logging for unified analysis
+  console.log(`🔍 [UNIFIED-ANALYSIS] 🧠 Starting ${options.deviceType} unified analysis`, {
+    requestId: options.requestId,
+    url: options.url,
+    hasScreenshot: !!options.screenshot,
+    screenshotSize: options.screenshot ? Math.round(options.screenshot.length / 1024) + 'KB' : 'N/A',
+    elementCount: options.elements?.length || 0,
+    startTime: new Date().toISOString()
+  })
   
   moduleLogger.info(`Starting unified analysis for ${options.deviceType}`, {
     requestId: options.requestId,
@@ -126,8 +135,20 @@ export async function performUnifiedAnalysis(options: UnifiedAnalysisOptions): P
   })
 
   try {
-    // Compress screenshot
+    // Step 1: Compress screenshot
+    const compressionStart = Date.now()
+    console.log(`🔍 [UNIFIED-ANALYSIS] 📸 Compressing ${options.deviceType} screenshot...`, { requestId: options.requestId })
+    
     const compressedScreenshot = await compressScreenshotForOpenAI(options.screenshot, options.deviceType)
+    
+    const compressionDuration = Date.now() - compressionStart
+    console.log(`🔍 [UNIFIED-ANALYSIS] ✅ Screenshot compression complete`, {
+      requestId: options.requestId,
+      originalSize: Math.round(options.screenshot.length / 1024) + 'KB',
+      compressedSize: Math.round(compressedScreenshot.length / 1024) + 'KB',
+      compressionRatio: Math.round((1 - compressedScreenshot.length / options.screenshot.length) * 100) + '%',
+      compressionTime: compressionDuration + 'ms'
+    })
     
     // Calculate metrics
     const companyName = options.url.includes("://") ? new URL(options.url).hostname.replace("www.", "") : options.url
@@ -141,9 +162,9 @@ export async function performUnifiedAnalysis(options: UnifiedAnalysisOptions): P
       `${idx + 1}. "${el.text || el.elementId}" (${el.tagName || 'element'}) - ${el.isAboveFold ? 'above' : 'below'} fold`
     ).join('\n') || 'No elements provided'
 
-    const unifiedPrompt = `AI Expert: Perform comprehensive website analysis combining CTA identification, CRO optimization, and click predictions.
+    const unifiedPrompt = `AI Expert: Perform streamlined website analysis combining CTA identification and click predictions.
 
-MISSION: Analyze screenshot and provide three analysis types in a single response.
+MISSION: Analyze screenshot and provide CTA identification and click predictions. CRO analysis is handled by internal engine.
 
 PAGE CONTEXT:
 - Title: ${options.domData?.title || "Unknown"}
@@ -166,55 +187,6 @@ RESPONSE FORMAT - STRICT JSON ONLY:
     "reasoning": "detailed explanation of CTA selection",
     "elementType": "button",
     "alternativeTexts": ["alternative1", "alternative2"]
-  },
-  "cro": {
-    "companyName": "${companyName}",
-    "url": "${options.url}",
-    "deviceType": "${options.deviceType}",
-    "dateAnalyzed": "${new Date().toLocaleDateString()}",
-    "currentPerformance": {
-      "primaryCTA": "CTA text from above",
-      "currentConversionRate": ${(currentCTR * 100).toFixed(1)},
-      "projectedConversionRate": ${(projectedCTR * 100).toFixed(1)},
-      "monthlyWastedSpend": ${costSavings},
-      "ctaType": "form-based or non-form",
-      "metricLabel": "Conversion Rate"
-    },
-    "frictionPoints": [
-      {"element": "Navigation", "type": "Distraction", "problem": "specific issue", "impact": "20-30% reduction"}
-    ],
-    "recommendedActions": {
-      "phase1": {
-        "title": "🟢 Quick Wins (1-2 hrs)",
-        "description": "Remove visual distractions",
-        "actions": ["specific actionable items"],
-        "teamOwner": ["Designer"],
-        "timeToValue": "1-2 days",
-        "estimatedTime": "1-2 hrs",
-        "expectedGain": "+3-5%"
-      },
-      "phase2": {
-        "title": "🟡 Form Fixes (3-5 hrs)",
-        "description": "Reduce form friction",
-        "actions": ["specific form improvements"],
-        "teamOwner": ["Developer"],
-        "timeToValue": "2-4 days",
-        "estimatedTime": "3-5 hrs",
-        "expectedGain": "+5-8%"
-      },
-      "phase3": {
-        "title": "🔴 Structural (1-2 days)",
-        "description": "Align messaging/layout",
-        "actions": ["specific structural changes"],
-        "teamOwner": ["Designer", "Developer"],
-        "timeToValue": "1-2 weeks",
-        "estimatedTime": "1-2 days",
-        "expectedGain": "+8-12%"
-      }
-    },
-    "nextSteps": ["Remove distractions", "Simplify forms", "Test changes"],
-    "highlights": ["Key insight", "Major opportunity"],
-    "additionalNotes": "Screenshot-verified recommendations only."
   },
   "predictions": {
     "predictions": [
@@ -312,7 +284,16 @@ CRITICAL: Respond with valid JSON only. No additional text outside the JSON stru
       }
     }
 
-    // Call OpenAI
+    // Step 3: Call OpenAI
+    const openaiStart = Date.now()
+    console.log(`🔍 [UNIFIED-ANALYSIS] 🤖 Calling OpenAI for ${options.deviceType} analysis...`, {
+      requestId: options.requestId,
+      model: "gpt-4o-mini",
+      temperature: 0.1,
+      maxTokens: 3000,
+      payloadSizeKB: Math.round(JSON.stringify(requestPayload).length / 1024)
+    })
+    
     const result = await generateText({
       model: openai("gpt-4o-mini"),
       messages,
@@ -320,27 +301,50 @@ CRITICAL: Respond with valid JSON only. No additional text outside the JSON stru
       maxTokens: 3000,
     })
 
-    moduleLogger.info(`OpenAI unified analysis completed`, {
+    const openaiDuration = Date.now() - openaiStart
+    console.log(`🔍 [UNIFIED-ANALYSIS] ✅ OpenAI analysis completed`, {
+      requestId: options.requestId,
+      responseLength: result.text.length,
+      openaiDuration: openaiDuration + 'ms',
+      tokensUsed: result.usage?.totalTokens || 'unknown',
+      costEstimate: result.usage?.totalTokens ? '$' + (result.usage.totalTokens * 0.00015 / 1000).toFixed(4) : 'unknown'
+    })
+
+    // Step 4: Parse the unified response
+    const parsingStart = Date.now()
+    console.log(`🔍 [UNIFIED-ANALYSIS] 📝 Parsing ${options.deviceType} OpenAI response...`, {
       requestId: options.requestId,
       responseLength: result.text.length
     })
-
-    // Parse the unified response
+    
     const analysisTime = Date.now() - startTime
     const parsedResult = parseUnifiedResponse(result.text, options, analysisTime)
     
-    moduleLogger.info(`Unified analysis completed for ${options.deviceType}`, {
+    const parsingDuration = Date.now() - parsingStart
+    console.log(`🔍 [UNIFIED-ANALYSIS] 🎉 ${options.deviceType} unified analysis completed`, {
       requestId: options.requestId,
-      analysisTime,
+      totalAnalysisTime: analysisTime + 'ms',
+      parsingTime: parsingDuration + 'ms',
       hasCTA: !!parsedResult.cta.text,
-      hasCRO: !!parsedResult.cro.companyName,
-      predictionCount: parsedResult.predictions.predictions.length
+      ctaText: parsedResult.cta.text,
+      ctaConfidence: parsedResult.cta.confidence,
+      predictionCount: parsedResult.predictions.predictions.length,
+      hasPrimaryCTA: !!parsedResult.predictions.primaryCTA,
+      primaryCTAText: parsedResult.predictions.primaryCTA?.text || 'None'
     })
 
     return parsedResult
 
   } catch (error) {
     const analysisTime = Date.now() - startTime
+    console.log(`🔍 [UNIFIED-ANALYSIS] ❌ ${options.deviceType} unified analysis failed`, {
+      requestId: options.requestId,
+      totalAnalysisTime: analysisTime + 'ms',
+      error: (error as Error).message,
+      errorType: (error as Error).name,
+      stackTrace: process.env.NODE_ENV === 'development' ? (error as Error).stack : undefined
+    })
+    
     moduleLogger.error(`Unified analysis failed for ${options.deviceType}`, error as Error, {
       requestId: options.requestId,
       analysisTime
@@ -362,8 +366,8 @@ function parseUnifiedResponse(responseText: string, options: UnifiedAnalysisOpti
 
     const parsed = JSON.parse(jsonMatch[0])
     
-    // Validate structure
-    if (!parsed.cta || !parsed.cro || !parsed.predictions) {
+    // Validate structure (CRO removed - handled by internal engine)
+    if (!parsed.cta || !parsed.predictions) {
       throw new Error('Invalid response structure - missing required sections')
     }
 
@@ -389,7 +393,6 @@ function parseUnifiedResponse(responseText: string, options: UnifiedAnalysisOpti
 
     return {
       cta: parsed.cta,
-      cro: parsed.cro,
       predictions: parsed.predictions,
       metadata: {
         deviceType: options.deviceType,
@@ -427,53 +430,6 @@ function createFallbackResponse(options: UnifiedAnalysisOptions, analysisTime: n
       elementType: "button",
       alternativeTexts: []
     },
-    cro: {
-      companyName,
-      url: options.url,
-      deviceType: options.deviceType,
-      dateAnalyzed: new Date().toLocaleDateString(),
-      currentPerformance: {
-        primaryCTA: "Primary CTA",
-        currentConversionRate: currentCTR * 100,
-        projectedConversionRate: currentCTR * 1.4 * 100,
-        monthlyWastedSpend: 500,
-        ctaType: "unknown",
-        metricLabel: "Conversion Rate"
-      },
-      frictionPoints: [],
-      recommendedActions: {
-        phase1: {
-          title: "🟢 Quick Wins (1-2 hrs)",
-          description: "Analysis unavailable",
-          actions: ["Contact support"],
-          teamOwner: ["Team"],
-          timeToValue: "N/A",
-          estimatedTime: "N/A",
-          expectedGain: "N/A"
-        },
-        phase2: {
-          title: "🟡 Form Fixes (3-5 hrs)",
-          description: "Analysis unavailable",
-          actions: ["Contact support"],
-          teamOwner: ["Team"],
-          timeToValue: "N/A",
-          estimatedTime: "N/A",
-          expectedGain: "N/A"
-        },
-        phase3: {
-          title: "🔴 Structural (1-2 days)",
-          description: "Analysis unavailable",
-          actions: ["Contact support"],
-          teamOwner: ["Team"],
-          timeToValue: "N/A",
-          estimatedTime: "N/A",
-          expectedGain: "N/A"
-        }
-      },
-      nextSteps: ["Retry analysis"],
-      highlights: ["Analysis failed"],
-      additionalNotes: "Unified analysis parsing failed - please retry"
-    },
     predictions: {
       predictions: [],
       primaryCTA: null
@@ -487,3 +443,5 @@ function createFallbackResponse(options: UnifiedAnalysisOptions, analysisTime: n
     }
   }
 }
+
+

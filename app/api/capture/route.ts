@@ -137,8 +137,47 @@ export async function POST(request: NextRequest) {
       })
     }
 
+    // Set up progress tracking (for debugging)
+    const progressLogs: Array<{ deviceType: string; step: string; progress: number; timestamp: number; duration?: number }> = []
+    const progressCallback = (deviceType: 'desktop' | 'mobile', step: string, progress: number, timing?: { duration: number }) => {
+      const logEntry = {
+        deviceType,
+        step,
+        progress,
+        timestamp: Date.now(),
+        duration: timing?.duration
+      }
+      progressLogs.push(logEntry)
+      
+      // Debug log for each progress update
+      console.log(`🔍 [CAPTURE-API] ${deviceType.toUpperCase()} Progress: ${progress}% - ${step}`, {
+        requestId,
+        timing: timing?.duration ? `${timing.duration}ms` : undefined,
+        timestamp: new Date().toISOString()
+      })
+    }
+
     // Perform parallel capture for both desktop and mobile
-    const { desktopAnalysis, mobileAnalysis, totalTime } = await runParallelAnalysis(sanitizedUrl, requestId)
+    apiLogger.info("Starting parallel analysis with progress tracking", { requestId, url: sanitizedUrl })
+    const { desktopAnalysis, mobileAnalysis, totalTime } = await runParallelAnalysis(sanitizedUrl, requestId, progressCallback)
+    
+    // Log progress summary
+    console.log(`🔍 [CAPTURE-API] Analysis Progress Summary:`, {
+      requestId,
+      totalSteps: progressLogs.length,
+      desktopSteps: progressLogs.filter(p => p.deviceType === 'desktop').length,
+      mobileSteps: progressLogs.filter(p => p.deviceType === 'mobile').length,
+      longestStep: progressLogs.reduce((max, current) => 
+        (current.duration || 0) > (max.duration || 0) ? current : max, 
+        progressLogs[0]
+      ),
+      progressTimeline: progressLogs.map(p => ({
+        device: p.deviceType,
+        step: p.step,
+        progress: p.progress,
+        duration: p.duration
+      }))
+    })
 
     // Validate both results
     if (!desktopAnalysis.captureResult || !desktopAnalysis.captureResult.screenshot || !desktopAnalysis.captureResult.domData) {
@@ -272,7 +311,8 @@ export async function POST(request: NextRequest) {
         elements: desktopAnalysis.elements,
         analysisTime: desktopAnalysis.analysisTime,
         deviceType: desktopAnalysis.deviceType,
-        unifiedAnalysis: desktopAnalysis.unifiedAnalysis // Include unified analysis results
+        unifiedAnalysis: desktopAnalysis.unifiedAnalysis, // Include unified analysis results (OpenAI)
+        internalCROAnalysis: desktopAnalysis.internalCROAnalysis // Include internal CRO analysis results
       },
       mobile: {
         captureResult: mobileResult,
@@ -282,7 +322,8 @@ export async function POST(request: NextRequest) {
         elements: mobileAnalysis.elements,
         analysisTime: mobileAnalysis.analysisTime,
         deviceType: mobileAnalysis.deviceType,
-        unifiedAnalysis: mobileAnalysis.unifiedAnalysis // Include unified analysis results
+        unifiedAnalysis: mobileAnalysis.unifiedAnalysis, // Include unified analysis results (OpenAI)
+        internalCROAnalysis: mobileAnalysis.internalCROAnalysis // Include internal CRO analysis results
       },
       
       // UNIFIED ANALYSIS: Single source of truth for CTA, CRO, and Competitor intel

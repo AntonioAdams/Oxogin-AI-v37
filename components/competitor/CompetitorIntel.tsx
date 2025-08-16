@@ -29,31 +29,34 @@ interface CompetitorIntelProps {
 export function CompetitorIntel({ originalData, competitorData, onBack }: CompetitorIntelProps) {
   const { analysis: competitorAnalysis } = competitorData
   
-  // Calculate metrics - use real data where available, smart defaults otherwise
-  const yourScore = 8.4 // Your site performs better (based on analysis)
-  const competitorScore = competitorAnalysis?.overallScore || 7.1
-  const advantage = Math.round(((yourScore - competitorScore) / competitorScore) * 100)
+  // Calculate metrics from actual analysis data only
+  const yourScore = originalData.croAnalysisResult?.overallScore || null
+  const competitorScore = competitorAnalysis?.overallScore || null
+  const advantage = (yourScore && competitorScore) ? 
+    Math.round(((yourScore - competitorScore) / competitorScore) * 100) : null
 
-  // Real metrics with smart defaults to ensure you're winning most categories
+  // Use only actual analysis data - no hard-coded values
   const yourMetrics = {
-    mobileUX: 92,
-    ctaPower: 85, 
-    trustScore: 88,
-    loadSpeed: 74 // This is where they might win
+    mobileUX: originalData.croAnalysisResult?.metrics?.mobileUX || null,
+    ctaPower: originalData.croAnalysisResult?.metrics?.ctaPower || null, 
+    trustScore: originalData.croAnalysisResult?.metrics?.trustScore || null,
+    loadSpeed: originalData.croAnalysisResult?.metrics?.loadSpeed || null
   }
 
   const competitorMetrics = {
-    mobileUX: competitorAnalysis?.metrics?.mobileUX || 68,
-    ctaPower: competitorAnalysis?.metrics?.ctaPower || 72,
-    trustScore: competitorAnalysis?.metrics?.trustScore || 76,
-    loadSpeed: competitorAnalysis?.metrics?.loadSpeed || 89 // They win here
+    mobileUX: competitorAnalysis?.metrics?.mobileUX || null,
+    ctaPower: competitorAnalysis?.metrics?.ctaPower || null,
+    trustScore: competitorAnalysis?.metrics?.trustScore || null,
+    loadSpeed: competitorAnalysis?.metrics?.loadSpeed || null
   }
 
-  // Calculate leading metrics
-  const leadingMetrics = [yourMetrics.mobileUX > competitorMetrics.mobileUX, 
-                         yourMetrics.ctaPower > competitorMetrics.ctaPower,
-                         yourMetrics.trustScore > competitorMetrics.trustScore,
-                         yourMetrics.loadSpeed > competitorMetrics.loadSpeed].filter(Boolean).length
+  // Calculate leading metrics - only count when both values exist
+  const leadingMetrics = [
+    yourMetrics.mobileUX && competitorMetrics.mobileUX && yourMetrics.mobileUX > competitorMetrics.mobileUX, 
+    yourMetrics.ctaPower && competitorMetrics.ctaPower && yourMetrics.ctaPower > competitorMetrics.ctaPower,
+    yourMetrics.trustScore && competitorMetrics.trustScore && yourMetrics.trustScore > competitorMetrics.trustScore,
+    yourMetrics.loadSpeed && competitorMetrics.loadSpeed && yourMetrics.loadSpeed > competitorMetrics.loadSpeed
+  ].filter(Boolean).length
 
   return (
     <div className="min-h-screen bg-white p-4">

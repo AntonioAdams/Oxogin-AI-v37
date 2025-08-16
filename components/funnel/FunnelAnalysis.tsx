@@ -157,7 +157,39 @@ export function FunnelAnalysis({ originalData, funnelData, onFunnelUrlSubmit }: 
   // Function to analyze secondary page for non-form CTAs - Your Site Funnel
   const analyzeSecondaryPage = useCallback(async (destinationUrl: string) => {
     console.log('🔗 analyzeSecondaryPage called with URL:', destinationUrl)
-    if (!destinationUrl) return
+    
+    // DEBUGGING: Detailed URL analysis
+    console.log('🔍 [FUNNEL-DEBUG] URL Analysis:', {
+      originalUrl: destinationUrl,
+      urlType: typeof destinationUrl,
+      urlLength: destinationUrl?.length,
+      isValidUrl: destinationUrl?.startsWith('http'),
+      hasQueryParams: destinationUrl?.includes('?'),
+      hasFragments: destinationUrl?.includes('#'),
+      timestamp: new Date().toISOString()
+    })
+    
+    if (!destinationUrl) {
+      console.log('❌ [FUNNEL-DEBUG] No destination URL provided')
+      return
+    }
+    
+    // DEBUGGING: URL validation
+    try {
+      const urlObj = new URL(destinationUrl)
+      console.log('✅ [FUNNEL-DEBUG] URL validation passed:', {
+        protocol: urlObj.protocol,
+        hostname: urlObj.hostname,
+        pathname: urlObj.pathname,
+        search: urlObj.search,
+        hash: urlObj.hash
+      })
+    } catch (urlError) {
+      console.log('❌ [FUNNEL-DEBUG] URL validation failed:', {
+        error: urlError.message,
+        url: destinationUrl
+      })
+    }
     
     console.log('📊 Setting initial loading state')
     setSecondaryAnalysis({ isLoading: true, data: null, error: false, progress: 0, stage: 'Starting analysis...' })
@@ -165,21 +197,93 @@ export function FunnelAnalysis({ originalData, funnelData, onFunnelUrlSubmit }: 
     try {
       // Step 1: Capture the destination page (OPTIMIZED: desktop only, no mobile for page 2)
       setSecondaryAnalysis(prev => ({ ...prev, progress: 10, stage: 'Capturing page...' }))
+      
+      console.log('🔍 [FUNNEL-DEBUG] Preparing API request:', {
+        endpoint: '/api/capture',
+        method: 'POST',
+        url: destinationUrl,
+        timestamp: new Date().toISOString()
+      })
+      
       const captureResponse = await fetch('/api/capture', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          url: destinationUrl,
-          isMobile: false, // OPTIMIZATION: Only desktop for page 2 analysis
-          skipCRO: true // OPTIMIZATION: Skip CRO analysis in capture if supported
+          url: destinationUrl
         })
       })
       
+      // DEBUGGING: Detailed response analysis
+      console.log('🔍 [FUNNEL-DEBUG] API Response details:', {
+        status: captureResponse.status,
+        statusText: captureResponse.statusText,
+        ok: captureResponse.ok,
+        headers: Object.fromEntries(captureResponse.headers.entries()),
+        url: captureResponse.url,
+        timestamp: new Date().toISOString()
+      })
+      
       if (!captureResponse.ok) {
-        throw new Error('Failed to capture destination page')
+        // DEBUGGING: Get actual error details before throwing
+        let errorDetails = null
+        try {
+          const errorText = await captureResponse.text()
+          console.log('🔍 [FUNNEL-DEBUG] Error response body:', errorText)
+          
+          try {
+            errorDetails = JSON.parse(errorText)
+            console.log('🔍 [FUNNEL-DEBUG] Parsed error details:', errorDetails)
+          } catch (parseError) {
+            console.log('🔍 [FUNNEL-DEBUG] Error response not JSON:', errorText)
+            errorDetails = { rawError: errorText }
+          }
+        } catch (readError) {
+          console.log('🔍 [FUNNEL-DEBUG] Could not read error response:', readError)
+        }
+        
+        const detailedError = new Error(`Failed to capture destination page: ${captureResponse.status} ${captureResponse.statusText}`)
+        detailedError.details = errorDetails
+        detailedError.httpStatus = captureResponse.status
+        
+        console.log('❌ [FUNNEL-DEBUG] Throwing detailed error:', {
+          message: detailedError.message,
+          details: errorDetails,
+          httpStatus: captureResponse.status,
+          originalUrl: destinationUrl
+        })
+        
+        throw detailedError
       }
       
-      const captureResult = await captureResponse.json()
+      const parallelResult = await captureResponse.json()
+      
+      // DEBUGGING: Analyze response structure
+      console.log('🔍 [FUNNEL-DEBUG] API Response structure:', {
+        hasDesktop: !!parallelResult.desktop,
+        hasMobile: !!parallelResult.mobile,
+        hasDirectCaptureResult: !!parallelResult.captureResult,
+        topLevelKeys: Object.keys(parallelResult),
+        desktopKeys: parallelResult.desktop ? Object.keys(parallelResult.desktop) : null,
+        mobileKeys: parallelResult.mobile ? Object.keys(parallelResult.mobile) : null,
+        timestamp: new Date().toISOString()
+      })
+      
+      // Extract desktop data from parallel response (backward compatibility)
+      const captureResult = parallelResult.desktop?.captureResult || parallelResult
+      
+      // DEBUGGING: Validate capture result
+      console.log('🔍 [FUNNEL-DEBUG] Extracted capture result:', {
+        hasCaptureResult: !!captureResult,
+        hasScreenshot: !!captureResult?.screenshot,
+        hasDomData: !!captureResult?.domData,
+        hasTitle: !!captureResult?.title,
+        hasButtons: !!captureResult?.buttons,
+        hasLinks: !!captureResult?.links,
+        captureResultKeys: captureResult ? Object.keys(captureResult) : null,
+        screenshotType: typeof captureResult?.screenshot,
+        screenshotLength: captureResult?.screenshot?.length,
+        timestamp: new Date().toISOString()
+      })
       
       // Step 2: Predict clicks on the captured page (OPTIMIZED: faster without CRO)
       setSecondaryAnalysis(prev => ({ ...prev, progress: 50, stage: 'Analyzing CTAs...' }))
@@ -368,9 +472,7 @@ export function FunnelAnalysis({ originalData, funnelData, onFunnelUrlSubmit }: 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          url: destinationUrl,
-          isMobile: false, // OPTIMIZATION: Only desktop for page 2 comparison
-          skipCRO: true // OPTIMIZATION: Skip CRO analysis in capture if supported
+          url: destinationUrl
         }),
         signal: controller.signal
       })
@@ -406,7 +508,9 @@ export function FunnelAnalysis({ originalData, funnelData, onFunnelUrlSubmit }: 
         var captureResult = fallbackCaptureResult
         console.log('✅ COMPARISON: Using fallback capture data')
       } else {
-        var captureResult = await captureResponse.json()
+        const parallelResult = await captureResponse.json()
+        // Extract desktop data from parallel response (backward compatibility)
+        var captureResult = parallelResult.desktop?.captureResult || parallelResult
         console.log('✅ COMPARISON: Step 1 completed - page captured successfully')
       }
       
@@ -591,6 +695,27 @@ export function FunnelAnalysis({ originalData, funnelData, onFunnelUrlSubmit }: 
       hasATFData: !!originalData.captureResult?.domData?.atfPremium 
     })
     
+    // DEBUGGING: Deep analysis of input data
+    console.log('🔍 [URL-DEBUG] Input data analysis:', {
+      prediction: {
+        elementId: prediction?.elementId,
+        text: prediction?.text,
+        href: prediction?.href,
+        url: prediction?.url,
+        coordinates: prediction?.coordinates,
+        jsNavigation: prediction?.jsNavigation,
+        hasAllKeys: prediction ? Object.keys(prediction) : null
+      },
+      originalData: {
+        hasCaptureResult: !!originalData?.captureResult,
+        hasDomData: !!originalData?.captureResult?.domData,
+        hasATFPremium: !!originalData?.captureResult?.domData?.atfPremium,
+        hasEnhancedData: !!originalData?.captureResult?.domData?.atfPremium?.enhancedData,
+        atfDataKeys: originalData?.captureResult?.domData?.atfPremium ? Object.keys(originalData.captureResult.domData.atfPremium) : null
+      },
+      timestamp: new Date().toISOString()
+    })
+    
     // First try explicit href/url from the prediction
     if (prediction.href && prediction.href !== 'null') {
       console.log('✅ Using prediction.href:', prediction.href)
@@ -603,6 +728,20 @@ export function FunnelAnalysis({ originalData, funnelData, onFunnelUrlSubmit }: 
 
     // 🚀 ENHANCED ATF PREMIUM INTEGRATION BRIDGE
     const atfData = originalData.captureResult?.domData?.atfPremium?.enhancedData
+    
+    // DEBUGGING: Detailed ATF data analysis
+    console.log('🔍 [ATF-DEBUG] ATF Processing Analysis:', {
+      hasAtfData: !!atfData,
+      hasPredictionElementId: !!prediction.elementId,
+      atfDataType: typeof atfData,
+      atfDataIsArray: Array.isArray(atfData),
+      atfDataKeys: atfData ? Object.keys(atfData).slice(0, 10) : null,
+      totalAtfElements: atfData ? Object.keys(atfData).length : 0,
+      atfDataStructure: atfData ? typeof Object.values(atfData)[0] : null,
+      firstAtfElementKeys: atfData && Object.values(atfData)[0] ? Object.keys(Object.values(atfData)[0]) : null,
+      timestamp: new Date().toISOString()
+    })
+    
     if (atfData && prediction.elementId) {
       console.log('🎯 ATF Bridge: Checking ATF data for element:', prediction.elementId)
       console.log('🎯 ATF Bridge: Available elements:', Object.keys(atfData).slice(0, 15))
@@ -702,6 +841,24 @@ export function FunnelAnalysis({ originalData, funnelData, onFunnelUrlSubmit }: 
             return bestExtraction.url
           }
         }
+        
+        // DEBUGGING: ATF element found but no URLs extracted
+        console.log('⚠️ [ATF-NO-URL] ATF element found but no valid destination URLs:', {
+          matchMethod,
+          elementId: prediction.elementId,
+          destUrl: {
+            value: atfElement.destUrl,
+            isNull: atfElement.destUrl === 'null',
+            isUndefined: atfElement.destUrl === undefined,
+            isEmpty: atfElement.destUrl === ''
+          },
+          urlExtractions: {
+            hasArray: !!atfElement.urlExtractions,
+            length: atfElement.urlExtractions?.length || 0,
+            allExtractions: atfElement.urlExtractions
+          },
+          timestamp: new Date().toISOString()
+        })
       } else {
         console.log('⚠️ ATF Bridge: Element not found after all matching attempts')
         console.log('🔍 ATF Bridge: Prediction details:', {
@@ -716,8 +873,25 @@ export function FunnelAnalysis({ originalData, funnelData, onFunnelUrlSubmit }: 
             coords: el.coordinates
           }))
         )
+        
+        // DEBUGGING: No ATF element match found
+        console.log('❌ [ATF-NO-MATCH] Comprehensive ATF matching failed:', {
+          predictionId: prediction.elementId,
+          predictionText: prediction.text,
+          searchAttempts: ['direct_id', 'text_match', 'keyword_match', 'coordinate_match'],
+          totalAtfElements: Object.keys(atfData).length,
+          firstFewAtfIds: Object.keys(atfData).slice(0, 10),
+          timestamp: new Date().toISOString()
+        })
       }
     } else {
+      // DEBUGGING: ATF data not available or no elementId
+      console.log('❌ [ATF-UNAVAILABLE] ATF processing skipped:', {
+        hasAtfData: !!atfData,
+        hasPredictionElementId: !!prediction.elementId,
+        atfDataPath: 'originalData.captureResult?.domData?.atfPremium?.enhancedData',
+        timestamp: new Date().toISOString()
+      })
       console.log('⚠️ ATF Bridge: Missing requirements:', {
         hasATFData: !!atfData,
         hasElementId: !!prediction.elementId,
@@ -726,16 +900,27 @@ export function FunnelAnalysis({ originalData, funnelData, onFunnelUrlSubmit }: 
     }
     
     // Check for JavaScript navigation clues from enhanced DOM capture
+    console.log('🔍 [JS-NAV-DEBUG] Checking JavaScript navigation clues:', {
+      hasJsNavigation: !!prediction.jsNavigation,
+      jsNavigationKeys: prediction.jsNavigation ? Object.keys(prediction.jsNavigation) : null,
+      jsNavigationData: prediction.jsNavigation,
+      timestamp: new Date().toISOString()
+    })
+    
     if (prediction.jsNavigation) {
       // Try data-href or data-url attributes first
       if (prediction.jsNavigation.dataHref) {
         const dataUrl = prediction.jsNavigation.dataHref
+        console.log('✅ [JS-NAV-SUCCESS] Found dataHref URL:', dataUrl)
+        
         // Handle relative URLs
         if (dataUrl.startsWith('/')) {
           const currentUrl = originalData.url || window.location.href
           try {
             const baseUrl = new URL(currentUrl).origin
-            return `${baseUrl}${dataUrl}`
+            const fullUrl = `${baseUrl}${dataUrl}`
+            console.log('🔍 [URL-CONVERSION] Converted relative to absolute:', { relative: dataUrl, absolute: fullUrl })
+            return fullUrl
           } catch (error) {
             console.warn('🎯 Invalid currentUrl for relative URL conversion:', currentUrl, error)
             return dataUrl // Return as-is if base URL is invalid
@@ -959,6 +1144,40 @@ export function FunnelAnalysis({ originalData, funnelData, onFunnelUrlSubmit }: 
     
     console.log('❌ Smart ATF URL Hunter: No URL found after comprehensive search')
     console.log('❌ Checked methods: href, url, enhanced_ATF, jsNavigation, onclick, text_search, coordinate_search, pattern_recognition, dom_cross_reference, intelligent_generation')
+    
+    // DEBUGGING: Final comprehensive failure analysis
+    console.log('❌ [URL-EXTRACTION-FAILED] Complete failure analysis:', {
+      predictionSummary: {
+        elementId: prediction?.elementId,
+        text: prediction?.text,
+        href: prediction?.href,
+        url: prediction?.url,
+        hasJsNavigation: !!prediction?.jsNavigation,
+        isFormRelated: prediction?.isFormRelated
+      },
+      dataSources: {
+        hasATFData: !!originalData?.captureResult?.domData?.atfPremium?.enhancedData,
+        atfElementCount: originalData?.captureResult?.domData?.atfPremium?.enhancedData ? Object.keys(originalData.captureResult.domData.atfPremium.enhancedData).length : 0,
+        hasCaptureResult: !!originalData?.captureResult,
+        hasDomData: !!originalData?.captureResult?.domData
+      },
+      searchAttempts: {
+        directHref: !!(prediction?.href && prediction.href !== 'null'),
+        directUrl: !!(prediction?.url && prediction.url !== 'null'),
+        atfProcessing: !!(originalData?.captureResult?.domData?.atfPremium?.enhancedData && prediction?.elementId),
+        jsNavigation: !!prediction?.jsNavigation,
+        fallbackSearch: true
+      },
+      possibleCauses: [
+        'ATF data missing or corrupted',
+        'Element ID mismatch between prediction and ATF data',
+        'URLs are null/invalid in all sources',
+        'JavaScript navigation not captured properly',
+        'Prediction data incomplete'
+      ],
+      timestamp: new Date().toISOString()
+    })
+    
     return null
   }, []) // MEMOIZED: Pure function with no external dependencies
 

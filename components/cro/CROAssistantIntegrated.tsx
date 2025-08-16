@@ -40,6 +40,8 @@ export function CROAssistantIntegrated({
   openAIResult, // Add OpenAI result
   croAnalysisResult, // Add CRO analysis result
 }: CROAssistantIntegratedProps) {
+
+  
   const [isExpanded, setIsExpanded] = useState(false)
 
   // FIXED: Derive device type from data instead of prop
@@ -76,17 +78,43 @@ export function CROAssistantIntegrated({
     return matchedElement?.isFormRelated || false
   }, [matchedElement])
 
-  // Auto-expand when analysis is pre-loaded
+  // Auto-expand when analysis is pre-loaded or CRO data is available
   useEffect(() => {
-    if (preLoadedAnalysis && primaryCTAPrediction && matchedElement) {
-      debugLogCategory("CRO Assistant", "Auto-expanding due to pre-loaded analysis")
-      setIsExpanded(true)
-    }
-  }, [preLoadedAnalysis, primaryCTAPrediction, matchedElement])
 
-  if (!captureResult || !primaryCTAPrediction || !matchedElement) {
+    
+    if (preLoadedAnalysis && primaryCTAPrediction && matchedElement) {
+      console.log("✅ Auto-expanding due to pre-loaded analysis with full CTA data")
+      debugLogCategory("CRO Assistant", "Auto-expanding due to pre-loaded analysis with full CTA data")
+      setIsExpanded(true)
+    } else if (preLoadedAnalysis && croAnalysisResult?.recommendations) {
+      console.log("✅ Auto-expanding due to available CRO analysis data")
+      debugLogCategory("CRO Assistant", "Auto-expanding due to available CRO analysis data")
+      setIsExpanded(true)
+    } else {
+      console.log("❌ Auto-expansion conditions not met")
+    }
+  }, [preLoadedAnalysis, primaryCTAPrediction, matchedElement, croAnalysisResult, isExpanded])
+
+  // Enhanced check: Allow rendering if we have CRO analysis data even without complete CTA data
+  if (!captureResult || (!primaryCTAPrediction && !croAnalysisResult) || (!matchedElement && !croAnalysisResult)) {
+    console.log("🚫 CROAssistantIntegrated not rendering due to missing data:", {
+      hasCaptureResult: !!captureResult,
+      hasPrimaryCTAPrediction: !!primaryCTAPrediction,
+      hasMatchedElement: !!matchedElement,
+      hasCroAnalysisResult: !!croAnalysisResult,
+      captureResultUrl: captureResult?.domData?.url,
+      primaryCTAId: primaryCTAPrediction?.elementId,
+      matchedElementText: matchedElement?.text
+    })
     return null
   }
+
+  console.log("✅ CROAssistantIntegrated rendering with all required data:", {
+    deviceType,
+    hasCroAnalysisResult: !!croAnalysisResult,
+    preLoadedAnalysis,
+    primaryCTAText: primaryCTAPrediction?.text
+  })
 
   return (
     <Card className="bg-white border border-gray-200">

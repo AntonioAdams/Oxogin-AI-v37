@@ -595,74 +595,79 @@ export function WelcomeScreen({ onSkip }: WelcomeScreenProps) {
     }
   }, [url, detectPrimaryCtaType, followPrimaryCta, getCurrentUserId, setProgressSmooth, fetchClickPredictions])
 
-  // Single capture function that handles both desktop and mobile
+  // TRUE PARALLEL capture function - captures both desktop and mobile simultaneously
   const captureWebsite = useCallback(
-    async (isMobile = false) => {
+    async () => {
       if (!url.trim()) {
         return
       }
 
+      // 🔍 PERFORMANCE: Debug parallel capture start
+      console.log("🔍 [WELCOM-SCREEN] 🚀 Starting TRUE PARALLEL capture for desktop + mobile", {
+        url,
+        timestamp: new Date().toISOString()
+      })
+
       // Credit checks now handled by global store and API
 
-      // Only start full loading sequence on desktop capture (the initial one)
-      if (!isMobile) {
-        setIsFullAnalysisLoading(true)
-        setLoadingProgress(0)
-        setTargetProgress(0)
-        setProgressSmooth(5, "Initializing comprehensive analysis...")
-        setCompletedSteps({
-          desktopCapture: false,
-          desktopAnalysis: false,
-          desktopOpenAI: false,
-          mobileCapture: false,
-          mobileAnalysis: false,
-          mobileOpenAI: false,
-        })
+      // Initialize full loading sequence for parallel capture
+      setIsFullAnalysisLoading(true)
+      setLoadingProgress(0)
+      setTargetProgress(0)
+      setProgressSmooth(5, "Initializing parallel desktop + mobile analysis...")
+      setCompletedSteps({
+        desktopCapture: false,
+        desktopAnalysis: false,
+        desktopOpenAI: false,
+        mobileCapture: false,
+        mobileAnalysis: false,
+        mobileOpenAI: false,
+      })
 
-        // Clear all state
-        setDesktopCaptureResult(null)
-        setDesktopAnalysisResult(null)
-        setDesktopMatchedElement(null)
-        setDesktopDebugMatches([])
-        setDesktopFormBoundaryBoxes([])
-        setDesktopShowTooltip(false)
-        setDesktopClickPredictions([])
-        setDesktopPrimaryCTAPrediction(null)
-        setDesktopCroAnalysisResult(null)
+      // Clear all state for both devices
+      setDesktopCaptureResult(null)
+      setDesktopAnalysisResult(null)
+      setDesktopMatchedElement(null)
+      setDesktopDebugMatches([])
+      setDesktopFormBoundaryBoxes([])
+      setDesktopShowTooltip(false)
+      setDesktopClickPredictions([])
+      setDesktopPrimaryCTAPrediction(null)
+      setDesktopCroAnalysisResult(null)
 
-        setMobileCaptureResult(null)
-        setMobileAnalysisResult(null)
-        setMobileMatchedElement(null)
-        setMobileDebugMatches([])
-        setMobileFormBoundaryBoxes([])
-        setMobileShowTooltip(false)
-        setMobileClickPredictions([])
-        setMobilePrimaryCTAPrediction(null)
-        setMobileCroAnalysisResult(null)
-      }
+      setMobileCaptureResult(null)
+      setMobileAnalysisResult(null)
+      setMobileMatchedElement(null)
+      setMobileDebugMatches([])
+      setMobileFormBoundaryBoxes([])
+      setMobileShowTooltip(false)
+      setMobileClickPredictions([])
+      setMobilePrimaryCTAPrediction(null)
+      setMobileCroAnalysisResult(null)
 
       setIsCapturing(true)
-      setCapturingDevice(isMobile ? "mobile" : "desktop")
+      setCapturingDevice("both") // Capturing both devices in parallel
 
       try {
         const userId = getCurrentUserId()
 
-        if (process.env.NODE_ENV === "development") {
-          console.log(`🚀 Starting ${isMobile ? "mobile" : "desktop"} capture with userId:`, userId)
-        }
+        console.log("🔍 [WELCOM-SCREEN] 🚀 Starting PARALLEL capture with userId:", userId)
 
-        if (!isMobile) {
-          setProgressSmooth(10, "Capturing desktop screenshot...")
-        } else {
-          setProgressSmooth(45, "Capturing mobile screenshot...")
-        }
+        setProgressSmooth(10, "Capturing desktop + mobile screenshots in parallel...")
+
+        // 🔍 PERFORMANCE: Call parallel capture API (no isMobile parameter = parallel)
+        const parallelStartTime = Date.now()
+        console.log("🔍 [WELCOM-SCREEN] 📡 Calling parallel capture API...", {
+          timestamp: new Date().toISOString(),
+          url
+        })
 
         const response = await fetch("/api/capture", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ url, isMobile, userId }),
+          body: JSON.stringify({ url, userId }), // NO isMobile = triggers parallel analysis
         })
 
         if (!response.ok) {
@@ -687,11 +692,13 @@ export function WelcomeScreen({ onSkip }: WelcomeScreenProps) {
           throw new Error(errorMessage)
         }
 
-        if (!isMobile) {
-          setProgressSmooth(20, "Processing desktop data...")
-        } else {
-          setProgressSmooth(55, "Processing mobile data...")
-        }
+        const parallelDuration = Date.now() - parallelStartTime
+        console.log("🔍 [WELCOM-SCREEN] ✅ Parallel capture API responded", {
+          duration: parallelDuration + 'ms',
+          timestamp: new Date().toISOString()
+        })
+
+        setProgressSmooth(20, "Processing parallel desktop + mobile data...")
 
         let data
         try {
@@ -703,284 +710,265 @@ export function WelcomeScreen({ onSkip }: WelcomeScreenProps) {
           throw new Error("Server returned invalid JSON response")
         }
 
-        if (!data || !data.screenshot || !data.domData) {
+        // 🔍 PERFORMANCE: Validate parallel response structure  
+        if (!data || !data.desktop || !data.mobile) {
           if (process.env.NODE_ENV === "development") {
-            console.error("Invalid response structure:", data)
+            console.error("Invalid parallel response structure:", data)
           }
-          throw new Error("Invalid response structure from server")
+          throw new Error("Invalid parallel response structure from server")
         }
+
+        console.log("🔍 [WELCOM-SCREEN] 📊 Parallel data received:", {
+          hasDesktop: !!data.desktop,
+          hasMobile: !!data.mobile,
+          desktopScreenshot: !!data.desktop?.captureResult?.screenshot,
+          mobileScreenshot: !!data.mobile?.captureResult?.screenshot,
+          timestamp: new Date().toISOString()
+        })
+
+        // Extract desktop and mobile data from parallel response
+        const desktopData = data.desktop.captureResult
+        const mobileData = data.mobile.captureResult
+        const desktopInternalCRO = data.desktop.internalCROAnalysis
+        const mobileInternalCRO = data.mobile.internalCROAnalysis
 
         // Update credit balance directly from API response
         if (data.creditsRemaining !== undefined && data.creditsUsed !== undefined) {
           // Credit updates now handled by global store via API side effects
-          
-          if (process.env.NODE_ENV === "development") {
-            console.log("💳 Credits updated directly from API response:", data.creditsRemaining, "remaining")
-          }
+          console.log("💳 Credits updated directly from API response:", data.creditsRemaining, "remaining")
         }
 
-        // Only log capture success in development
-        if (process.env.NODE_ENV === "development") {
-          console.log(`✅ ${isMobile ? "mobile" : "desktop"} capture successful:`, {
-            title: data.domData.title,
-            formFields: data.domData.formFields?.length || 0,
-            buttons: data.domData.buttons?.length || 0,
-            forms: data.domData.forms?.length || 0,
-            creditsRemaining: data.creditsRemaining,
-          })
+        // Log parallel capture success
+        console.log("🔍 [WELCOM-SCREEN] ✅ PARALLEL capture successful:", {
+          desktopTitle: desktopData?.title,
+          mobileTitle: mobileData?.title,
+          desktopFormFields: desktopData?.formFields?.length || 0,
+          mobileFormFields: mobileData?.formFields?.length || 0,
+          desktopButtons: desktopData?.buttons?.length || 0,
+          mobileButtons: mobileData?.buttons?.length || 0,
+          creditsRemaining: data.creditsRemaining,
+          totalAnalysisTime: data.totalTime + 'ms'
+        })
+
+        // Set BOTH desktop and mobile data simultaneously 
+        setDesktopCaptureResult(desktopData)
+        setMobileCaptureResult(mobileData)
+        setCompletedSteps((prev) => ({ 
+          ...prev, 
+          desktopCapture: true, 
+          mobileCapture: true 
+        }))
+        setActiveTab("desktop") // Default to desktop view
+
+        // EXTRACT INTERNAL CRO ANALYSIS DATA FOR BOTH DEVICES
+        if (desktopInternalCRO) {
+          console.log("📊 Setting desktop CRO analysis from internal engine:", desktopInternalCRO)
+          setDesktopOpenAIResult(desktopInternalCRO)
+          setDesktopCroAnalysisResult(desktopInternalCRO)
         }
 
-        if (isMobile) {
-          setMobileCaptureResult(data)
-          setCompletedSteps((prev) => ({ ...prev, mobileCapture: true }))
-          
-          // EXTRACT UNIFIED ANALYSIS DATA FOR MOBILE
-          if (data.unifiedAnalysis?.cro) {
-            console.log("📊 Setting mobile CRO analysis from unified analysis:", data.unifiedAnalysis.cro)
-            setMobileOpenAIResult(data.unifiedAnalysis.cro)
-            setMobileCroAnalysisResult(data.unifiedAnalysis)
-          }
-        } else {
-          setDesktopCaptureResult(data)
-          setCompletedSteps((prev) => ({ ...prev, desktopCapture: true }))
-          setActiveTab("desktop")
-          
-          // EXTRACT UNIFIED ANALYSIS DATA FOR DESKTOP
-          if (data.unifiedAnalysis?.cro) {
-            console.log("📊 Setting desktop CRO analysis from unified analysis:", data.unifiedAnalysis.cro)
-            setDesktopOpenAIResult(data.unifiedAnalysis.cro)
-            setDesktopCroAnalysisResult(data.unifiedAnalysis)
-          }
+        if (mobileInternalCRO) {
+          console.log("📊 Setting mobile CRO analysis from internal engine:", mobileInternalCRO)
+          setMobileOpenAIResult(mobileInternalCRO)
+          setMobileCroAnalysisResult(mobileInternalCRO)
         }
 
-        // Auto-analyze CTA after successful capture
-        const autoAnalyzeCTA = async (attempt = 1) => {
+        // Auto-analyze CTA for BOTH devices after successful parallel capture
+        const autoAnalyzeBothDevices = async (attempt = 1) => {
           try {
-            // Log auto-analysis start in both dev and production
-            console.log(`🔄 Auto-analyzing ${isMobile ? "mobile" : "desktop"} CTA (attempt ${attempt})...`)
+            // Log auto-analysis start for parallel processing
+            console.log(`🔄 Auto-analyzing BOTH desktop AND mobile CTAs (attempt ${attempt})...`)
 
             setIsAnalyzing(true)
+            setProgressSmooth(25, "Analyzing call-to-actions for both devices...")
 
-            if (!isMobile) {
-              setProgressSmooth(25, "Analyzing desktop call-to-action...")
-            } else {
-              setProgressSmooth(60, "Analyzing mobile call-to-action...")
-            }
-
-            // Clear analysis state for the appropriate device
-            if (isMobile) {
-              setMobileAnalysisResult(null)
-              setMobileMatchedElement(null)
-              setMobileDebugMatches([])
-              setMobileShowTooltip(false)
-              setMobilePrimaryCTAPrediction(null)
-              setMobileCroAnalysisResult(null)
-            } else {
-              setDesktopAnalysisResult(null)
-              setDesktopMatchedElement(null)
-              setDesktopDebugMatches([])
-              setDesktopShowTooltip(false)
-              setDesktopPrimaryCTAPrediction(null)
-              setDesktopCroAnalysisResult(null)
-            }
-
-            // STEP 1: Fetch click predictions FIRST
-            console.log("📊 Fetching click predictions...")
-
-            if (!isMobile) {
-              setProgressSmooth(30, "Generating click predictions...")
-            } else {
-              setProgressSmooth(65, "Generating click predictions...")
-            }
-
-            const predictions = await fetchClickPredictions(
-              data,
-              isMobile ? setMobileClickPredictions : setDesktopClickPredictions,
-              isMobile,
-              getCurrentUserId()
-            )
-
-            // REMOVED: Background OpenAI CRO analysis - now handled by unified analysis
-            // CRO analysis is included in the unified analysis for better efficiency and cost reduction
-            console.log(`✅ CRO analysis for ${isMobile ? "mobile" : "desktop"} will be provided by unified analysis`)
+            // Clear analysis state for BOTH devices (KEEP CRO ANALYSIS!)
+            setDesktopAnalysisResult(null)
+            setDesktopMatchedElement(null)
+            setDesktopDebugMatches([])
+            setDesktopShowTooltip(false)
+            setDesktopPrimaryCTAPrediction(null)
             
-            if (predictions && predictions.length > 0) {
-              // Mark OpenAI step as completed since it's included in unified analysis
-              if (isMobile) {
-                setCompletedSteps((prev) => ({ ...prev, mobileOpenAI: true }))
-              } else {
-                setCompletedSteps((prev) => ({ ...prev, desktopOpenAI: true }))
-              }
-            }
+            setMobileAnalysisResult(null)
+            setMobileMatchedElement(null)
+            setMobileDebugMatches([])
+            setMobileShowTooltip(false)
+            setMobilePrimaryCTAPrediction(null)
 
-            // STEP 2: Analyze CTA with AI
-            console.log("🤖 Analyzing CTA with AI...")
+            // STEP 1: Fetch click predictions for BOTH devices in PARALLEL
+            console.log("📊 Fetching click predictions for BOTH devices...")
+            setProgressSmooth(30, "Generating click predictions for both devices...")
 
-            const response = await fetch(data.screenshot)
-            const blob = await response.blob()
+            // Fetch predictions for both devices in parallel
+            const [desktopPredictions, mobilePredictions] = await Promise.all([
+              fetchClickPredictions(desktopData, setDesktopClickPredictions, false, getCurrentUserId()),
+              fetchClickPredictions(mobileData, setMobileClickPredictions, true, getCurrentUserId())
+            ])
 
-            const formData = new FormData()
-            formData.append("image", blob, "screenshot.png")
-            formData.append("domData", JSON.stringify(data.domData))
-
-            const analysisResponse = await fetch("/api/analyze-cta", {
-              method: "POST",
-              body: formData,
+            console.log("🔍 [WELCOM-SCREEN] ✅ PARALLEL click predictions completed:", {
+              desktopPredictions: desktopPredictions?.length || 0,
+              mobilePredictions: mobilePredictions?.length || 0,
+              timestamp: new Date().toISOString()
             })
 
-            if (!analysisResponse.ok) {
-              const errorText = await analysisResponse.text()
-              console.error("CTA analysis failed:", analysisResponse.status, errorText)
-              throw new Error("Failed to analyze CTA")
+            // CRO analysis already handled by internal engine during capture
+            console.log("✅ CRO analysis for BOTH devices provided by internal engine")
+            
+            if ((desktopPredictions && desktopPredictions.length > 0) || (mobilePredictions && mobilePredictions.length > 0)) {
+              // Mark OpenAI steps as completed for both devices
+              setCompletedSteps((prev) => ({ 
+                ...prev, 
+                desktopOpenAI: true,
+                mobileOpenAI: true 
+              }))
             }
 
-            const analysisData = await analysisResponse.json()
+            // STEP 2: Analyze CTA with AI for BOTH devices in PARALLEL
+            console.log("🤖 Analyzing CTAs with AI for BOTH devices...")
+            setProgressSmooth(50, "AI analyzing CTAs for both devices...")
 
-            console.log("✅ AI analysis complete:", analysisData.result.text)
+            // Analyze both devices in parallel
+            const analyzeDevice = async (deviceData: any, deviceType: 'desktop' | 'mobile') => {
+              const response = await fetch(deviceData.screenshot)
+              const blob = await response.blob()
 
-            if (isMobile) {
-              setMobileAnalysisResult(analysisData.result)
-              setCompletedSteps((prev) => ({ ...prev, mobileAnalysis: true }))
-            } else {
-              setDesktopAnalysisResult(analysisData.result)
-              setCompletedSteps((prev) => ({ ...prev, desktopAnalysis: true }))
+              const formData = new FormData()
+              formData.append("image", blob, `${deviceType}-screenshot.png`)
+              formData.append("domData", JSON.stringify(deviceData.domData))
+
+              return fetch("/api/analyze-cta", {
+                method: "POST",
+                body: formData,
+              })
             }
 
-            // STEP 3: Match DOM element
-            if (process.env.NODE_ENV === "development") {
-              console.log("🎯 Matching DOM element...")
-            }
+            const [desktopAnalysisResponse, mobileAnalysisResponse] = await Promise.all([
+              analyzeDevice(desktopData, 'desktop'),
+              analyzeDevice(mobileData, 'mobile')
+            ])
 
-            const ctaMatcher = isMobile ? mobileCtaMatcher : desktopCtaMatcher
-            const { match, debug } = ctaMatcher.findMatchingElement(analysisData.result, data.domData)
-
-            if (isMobile) {
-              setMobileMatchedElement(match)
-              setMobileDebugMatches(debug)
-            } else {
-              setDesktopMatchedElement(match)
-              setDesktopDebugMatches(debug)
-            }
-
-            if (match) {
-              // Only log DOM match in development
-              if (process.env.NODE_ENV === "development") {
-                console.log("✅ DOM match found:", match.text)
+            // Process both responses
+            const processResponse = async (response: Response, deviceType: 'desktop' | 'mobile') => {
+              if (!response.ok) {
+                const errorText = await response.text()
+                console.error(`${deviceType} CTA analysis failed:`, response.status, errorText)
+                throw new Error(`Failed to analyze ${deviceType} CTA`)
               }
+              return await response.json()
+            }
 
-              // STEP 4: Find matching prediction and show tooltip
-              if (process.env.NODE_ENV === "development") {
-                console.log("🔍 Finding matching prediction...")
-              }
-              const currentPredictions = isMobile ? mobileClickPredictions : desktopClickPredictions
-              const prediction = findCTAPrediction(
-                predictions || currentPredictions,
-                match,
-                analysisData.result.text,
-                analysisData.result,
+            const [desktopAnalysisData, mobileAnalysisData] = await Promise.all([
+              processResponse(desktopAnalysisResponse, 'desktop'),
+              processResponse(mobileAnalysisResponse, 'mobile')
+            ])
+
+            console.log("🔍 [WELCOM-SCREEN] ✅ PARALLEL AI analysis complete:", {
+              desktopCTA: desktopAnalysisData.result.text,
+              mobileCTA: mobileAnalysisData.result.text,
+              timestamp: new Date().toISOString()
+            })
+
+            // Set analysis results for both devices
+            setDesktopAnalysisResult(desktopAnalysisData.result)
+            setMobileAnalysisResult(mobileAnalysisData.result)
+            setCompletedSteps((prev) => ({ 
+              ...prev, 
+              desktopAnalysis: true,
+              mobileAnalysis: true 
+            }))
+
+            // STEP 3: Match DOM elements for BOTH devices
+            console.log("🎯 Matching DOM elements for BOTH devices...")
+            setProgressSmooth(70, "Matching DOM elements...")
+
+            // Match DOM elements for both devices in parallel
+            const desktopMatch = desktopCtaMatcher.findMatchingElement(desktopAnalysisData.result, desktopData.domData)
+            const mobileMatch = mobileCtaMatcher.findMatchingElement(mobileAnalysisData.result, mobileData.domData)
+
+            // Set matched elements for both devices
+            setDesktopMatchedElement(desktopMatch.match)
+            setDesktopDebugMatches(desktopMatch.debug)
+            setMobileMatchedElement(mobileMatch.match)
+            setMobileDebugMatches(mobileMatch.debug)
+
+            console.log("🔍 [WELCOM-SCREEN] ✅ PARALLEL DOM matching complete:", {
+              desktopMatch: !!desktopMatch.match,
+              mobileMatch: !!mobileMatch.match,
+              desktopCTA: desktopMatch.match?.text || 'None',
+              mobileCTA: mobileMatch.match?.text || 'None',
+              timestamp: new Date().toISOString()
+            })
+
+            // STEP 4: Find matching predictions and show tooltips for BOTH devices
+            console.log("🔍 Finding matching predictions for BOTH devices...")
+            setProgressSmooth(85, "Setting up tooltips for both devices...")
+
+            // Process desktop matches and predictions
+            if (desktopMatch.match) {
+              console.log("✅ Desktop DOM match found:", desktopMatch.match.text)
+              
+              const desktopPrediction = findCTAPrediction(
+                desktopPredictions || desktopClickPredictions,
+                desktopMatch.match,
+                desktopAnalysisData.result.text,
+                desktopAnalysisData.result,
               )
 
-              if (prediction) {
-                // Only log prediction found in development
-                if (process.env.NODE_ENV === "development") {
-                  console.log("✅ Prediction found, showing tooltip:", prediction.elementId)
-                  console.log("🐛 WelcomeScreen Debug - Found prediction:", {
-                    text: prediction.text,
-                    elementId: prediction.elementId,
-                    isFormRelated: prediction.isFormRelated,
-                    fullObject: prediction
-                  })
-                }
-
-                if (isMobile) {
-                  setMobilePrimaryCTAPrediction(prediction)
-                  setTimeout(() => {
-                    setMobileShowTooltip(true)
-                    if (process.env.NODE_ENV === "development") {
-                      console.log("🎉 Mobile tooltip should now be visible!")
-                    }
-                  }, 100)
-                } else {
-                  setDesktopPrimaryCTAPrediction(prediction)
-                  setTimeout(() => {
-                    setDesktopShowTooltip(true)
-                    if (process.env.NODE_ENV === "development") {
-                      console.log("🎉 Desktop tooltip should now be visible!")
-                    }
-                  }, 100)
-                }
+              if (desktopPrediction) {
+                console.log("✅ Desktop prediction found, showing tooltip:", desktopPrediction.elementId)
+                
+                setDesktopPrimaryCTAPrediction(desktopPrediction)
+                setTimeout(() => {
+                  setDesktopShowTooltip(true)
+                  console.log("🎉 Desktop tooltip should now be visible!")
+                }, 100)
 
                 // STEP 5: Two-Step Funnel Analysis for Non-Form CTAs (Desktop Only)
-                if (!isMobile && analysisData.result && prediction) {
-                  setTimeout(async () => {
-                    await handleTwoStepFunnelAnalysis(analysisData.result, data, prediction)
-                  }, 500) // Small delay to let tooltip render
-                }
-
-                // STEP 6: OpenAI analysis already running in background (started at 30-65%)
-                console.log(`🧠 OpenAI analysis already running in background for ${isMobile ? "mobile" : "desktop"} - will complete soon`)
-                
-                // Add a fallback mechanism to ensure analysis completes
-                setTimeout(() => {
-                  // Check if OpenAI analysis completed, if not, trigger it manually
-                  if (isMobile) {
-                    if (!mobileOpenAIResult) {
-                      console.log(`🧠 Fallback: Triggering manual OpenAI analysis for mobile`)
-                      // Trigger manual analysis if auto-analysis didn't complete
-                      setTimeout(() => {
-                        if (!mobileOpenAIResult) {
-                          console.log(`🧠 Manual fallback analysis for mobile`)
-                          // This will be handled by the CROExecutiveBrief component
-                        }
-                      }, 5000) // Wait 5 seconds before manual trigger
-                    }
-                  } else {
-                    if (!desktopOpenAIResult) {
-                      console.log(`🧠 Fallback: Triggering manual OpenAI analysis for desktop`)
-                      // Trigger manual analysis if auto-analysis didn't complete
-                      setTimeout(() => {
-                        if (!desktopOpenAIResult) {
-                          console.log(`🧠 Manual fallback analysis for desktop`)
-                          // This will be handled by the CROExecutiveBrief component
-                        }
-                      }, 5000) // Wait 5 seconds before manual trigger
-                    }
+                setTimeout(async () => {
+                  try {
+                    await handleTwoStepFunnelAnalysis(desktopAnalysisData.result, desktopData, desktopPrediction)
+                  } catch (error) {
+                    console.log("⚠️ Desktop funnel analysis failed:", error)
                   }
-                }, 3000) // Check after 3 seconds
+                }, 500) // Small delay to let tooltip render
               } else {
-                if (process.env.NODE_ENV === "development") {
-                  console.log("⚠️ No matching prediction found")
-                }
+                console.log("⚠️ No matching desktop prediction found")
               }
             } else {
-              if (process.env.NODE_ENV === "development") {
-                console.log("❌ No DOM match found")
-              }
+              console.log("❌ No desktop DOM match found")
             }
 
-            // Auto-trigger mobile capture only if this was a desktop capture
-            if (!isMobile) {
-              if (process.env.NODE_ENV === "development") {
-                console.log("🚀 Auto-triggering mobile capture after desktop completion...")
-              }
+            // Process mobile matches and predictions
+            if (mobileMatch.match) {
+              console.log("✅ Mobile DOM match found:", mobileMatch.match.text)
+              
+              const mobilePrediction = findCTAPrediction(
+                mobilePredictions || mobileClickPredictions,
+                mobileMatch.match,
+                mobileAnalysisData.result.text,
+                mobileAnalysisData.result,
+              )
 
-              // Start mobile capture in background after a short delay
-              setTimeout(async () => {
-                try {
-                  if (process.env.NODE_ENV === "development") {
-                    console.log("📱 Starting background mobile capture...")
-                  }
-                  await captureWebsite(true) // Capture mobile version
-                } catch (error) {
-                  if (process.env.NODE_ENV === "development") {
-                    console.error("❌ Auto mobile capture failed:", error)
-                  }
-                }
-              }, 1000) // 1 second delay
+              if (mobilePrediction) {
+                console.log("✅ Mobile prediction found, showing tooltip:", mobilePrediction.elementId)
+                
+                setMobilePrimaryCTAPrediction(mobilePrediction)
+                setTimeout(() => {
+                  setMobileShowTooltip(true)
+                  console.log("🎉 Mobile tooltip should now be visible!")
+                }, 100)
+              } else {
+                console.log("⚠️ No matching mobile prediction found")
+              }
             } else {
-              // Mobile analysis complete - check if we should finish loading
-              checkIfAnalysisComplete()
+              console.log("❌ No mobile DOM match found")
             }
+
+            // 🔍 PERFORMANCE: PARALLEL analysis complete for BOTH devices!
+            console.log("🔍 [WELCOM-SCREEN] 🎉 PARALLEL capture and analysis complete - both desktop and mobile available!")
+            
+            // Both desktop and mobile analysis complete - check if we should finish loading
+            checkIfAnalysisComplete()
           } catch (error) {
             if (process.env.NODE_ENV === "development") {
               console.error(`❌ Auto-analysis attempt ${attempt} failed:`, error)
@@ -991,15 +979,13 @@ export function WelcomeScreen({ onSkip }: WelcomeScreenProps) {
               if (process.env.NODE_ENV === "development") {
                 console.log("🔄 Retrying auto-analysis...")
               }
-              setTimeout(() => autoAnalyzeCTA(2), 200)
+              setTimeout(() => autoAnalyzeBothDevices(2), 200)
             } else {
               if (process.env.NODE_ENV === "development") {
                 console.log("❌ Auto-analysis failed after retry")
               }
-              // Hide loading on error
-              if (isMobile) {
-                checkIfAnalysisComplete()
-              }
+              // Hide loading on error for parallel analysis
+              checkIfAnalysisComplete()
             }
           } finally {
             setIsAnalyzing(false)
@@ -1007,7 +993,7 @@ export function WelcomeScreen({ onSkip }: WelcomeScreenProps) {
         }
 
         // Start auto-analysis
-        autoAnalyzeCTA()
+        autoAnalyzeBothDevices()
       } catch (error) {
         if (process.env.NODE_ENV === "development") {
           console.error("Error capturing website:", error)
@@ -1076,7 +1062,7 @@ export function WelcomeScreen({ onSkip }: WelcomeScreenProps) {
     if (url.trim()) {
       setShowAnalysis(true)
       setCurrentAnalysisId(null) // Clear current analysis ID for new analysis
-      captureWebsite(false) // Start with desktop capture
+      captureWebsite() // Start parallel capture for both desktop and mobile
     }
   }
 
@@ -1474,13 +1460,13 @@ export function WelcomeScreen({ onSkip }: WelcomeScreenProps) {
       setLoadingStage("Running CRO analysis...")
       setLoadingProgress(70)
       
-      // FIXED: Extract CRO analysis from unified analysis instead of separate API call
+      // FIXED: Extract CRO analysis from internal CRO engine instead of OpenAI
       let croAnalysisResult = null
-      if (captureResult.unifiedAnalysis?.cro) {
-        console.log("📊 Using unified CRO analysis for funnel:", captureResult.unifiedAnalysis.cro)
-        croAnalysisResult = captureResult.unifiedAnalysis
+      if (captureResult.desktop?.internalCROAnalysis) {
+        console.log("📊 Using internal CRO analysis for funnel:", captureResult.desktop.internalCROAnalysis)
+        croAnalysisResult = captureResult.desktop.internalCROAnalysis
       } else {
-        console.log("⚠️ No unified CRO analysis found in capture result")
+        console.log("⚠️ No internal CRO analysis found in capture result")
       }
       console.log("⚡ Funnel CRO analysis extracted from unified analysis")
 
@@ -1637,26 +1623,30 @@ export function WelcomeScreen({ onSkip }: WelcomeScreenProps) {
       const primaryPrediction = competitorPredictions?.[0]
       
       let competitorCROResult = null
-      if (primaryPrediction) {
-        const compressedScreenshot = await compressScreenshotClient(desktopData.screenshot, "desktop")
-        
-        const croResponse = await fetch("/api/analyze-cro-openai", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            primaryCTAId: primaryPrediction.elementId,
-            primaryCTAText: primaryPrediction.text || "Primary CTA",
-            deviceType: "desktop",
-            currentCTR: (primaryPrediction.ctr || 0.065) * 100,
-            projectedCTR: (primaryPrediction.ctr || 0.065) * 1.4 * 100,
-            improvementPotential: 40,
-            costSavings: primaryPrediction.wastedSpend || 1500,
-            screenshot: compressedScreenshot,
+      if (primaryPrediction && desktopData?.domData) {
+        try {
+          const croResponse = await fetch("/api/analyze-cro-internal", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              captureData: {
+                domData: desktopData.domData,
+                screenshot: desktopData.screenshot || '',
+                timestamp: new Date().toISOString(),
+                isMobile: false
+              },
+              deviceType: "desktop"
+            })
           })
-        })
 
-        if (croResponse.ok) {
-          competitorCROResult = await croResponse.json()
+          if (croResponse.ok) {
+            competitorCROResult = await croResponse.json()
+            console.log("📊 Competitor internal CRO analysis completed")
+          } else {
+            console.warn("⚠️ Competitor internal CRO analysis failed, continuing without it")
+          }
+        } catch (error) {
+          console.warn("⚠️ Competitor internal CRO analysis error:", error)
         }
       }
 
@@ -2239,7 +2229,7 @@ export function WelcomeScreen({ onSkip }: WelcomeScreenProps) {
                         onReset={resetAnalysis}
                         clickPredictions={desktopClickPredictions}
                         allDOMElements={desktopCaptureResult.domData}
-                        openAIResult={desktopOpenAIResult}
+                        croAnalysisResult={desktopCroAnalysisResult}
                       />
                     ) : (
                       <Card className="p-6">
@@ -2264,7 +2254,7 @@ export function WelcomeScreen({ onSkip }: WelcomeScreenProps) {
                         onReset={resetAnalysis}
                         clickPredictions={mobileClickPredictions}
                         allDOMElements={mobileCaptureResult.domData}
-                        openAIResult={mobileOpenAIResult}
+                        croAnalysisResult={mobileCroAnalysisResult}
                       />
                     ) : (
                       <Card className="p-6">

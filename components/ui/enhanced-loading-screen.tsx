@@ -25,6 +25,17 @@ interface EnhancedLoadingScreenProps {
   mobileClickPredictions?: any[]
 }
 
+// Detailed step tracking for granular progress
+interface DetailedStep {
+  id: string
+  label: string
+  progress: number
+  status: 'pending' | 'active' | 'completed' | 'failed'
+  duration?: number
+  deviceType?: 'desktop' | 'mobile' | 'both'
+  startTime?: number
+}
+
 export default function EnhancedLoadingScreen({
   loadingProgress,
   loadingStage,
@@ -39,6 +50,30 @@ export default function EnhancedLoadingScreen({
   const [floatingPredictions, setFloatingPredictions] = useState<any[]>([])
   const [websiteScreenshot, setWebsiteScreenshot] = useState<string | null>(null)
   const [isMobile, setIsMobile] = useState(false)
+  
+  // Detailed step tracking
+  const [detailedSteps, setDetailedSteps] = useState<DetailedStep[]>([
+    { id: 'init', label: 'Initializing Analysis', progress: 0, status: 'pending', deviceType: 'both' },
+    { id: 'desktop_capture', label: 'Desktop Screenshot', progress: 0, status: 'pending', deviceType: 'desktop' },
+    { id: 'mobile_capture', label: 'Mobile Screenshot', progress: 0, status: 'pending', deviceType: 'mobile' },
+    { id: 'desktop_elements', label: 'Desktop Elements', progress: 0, status: 'pending', deviceType: 'desktop' },
+    { id: 'mobile_elements', label: 'Mobile Elements', progress: 0, status: 'pending', deviceType: 'mobile' },
+    { id: 'desktop_ai', label: 'Desktop AI Analysis', progress: 0, status: 'pending', deviceType: 'desktop' },
+    { id: 'mobile_ai', label: 'Mobile AI Analysis', progress: 0, status: 'pending', deviceType: 'mobile' },
+    { id: 'desktop_cro', label: 'Desktop CRO Analysis', progress: 0, status: 'pending', deviceType: 'desktop' },
+    { id: 'mobile_cro', label: 'Mobile CRO Analysis', progress: 0, status: 'pending', deviceType: 'mobile' },
+    { id: 'finalize', label: 'Finalizing Results', progress: 0, status: 'pending', deviceType: 'both' }
+  ])
+  
+  // Performance metrics tracking
+  const [performanceMetrics, setPerformanceMetrics] = useState({
+    startTime: Date.now(),
+    currentStep: 'Initializing...',
+    stepsCompleted: 0,
+    totalSteps: 10,
+    estimatedTimeRemaining: 0,
+    slowestStep: { name: '', duration: 0 }
+  })
 
   const phases = [
     { name: 'wireframe', label: 'Mapping Site Structure', progress: 0 },
@@ -60,6 +95,126 @@ export default function EnhancedLoadingScreen({
     
     return () => window.removeEventListener('resize', checkMobile)
   }, [])
+
+  // Update detailed steps based on loading progress and completed steps
+  useEffect(() => {
+    const updateSteps = () => {
+      setDetailedSteps(prev => {
+        const updated = prev.map(step => {
+          let newStatus = step.status
+          let newProgress = step.progress
+          
+          // Map completion status to step updates
+          switch (step.id) {
+            case 'init':
+              if (loadingProgress > 0) {
+                newStatus = loadingProgress >= 5 ? 'completed' : 'active'
+                newProgress = Math.min(100, loadingProgress * 20) // 0-5% maps to 0-100%
+              }
+              break
+            case 'desktop_capture':
+              if (completedSteps.desktopCapture || desktopCaptureResult) {
+                newStatus = 'completed'
+                newProgress = 100
+              } else if (loadingProgress > 5) {
+                newStatus = 'active'
+                newProgress = Math.min(100, (loadingProgress - 5) * 5) // 5-25% maps to 0-100%
+              }
+              break
+            case 'mobile_capture':
+              if (completedSteps.mobileCapture || mobileCaptureResult) {
+                newStatus = 'completed'
+                newProgress = 100
+              } else if (loadingProgress > 5) {
+                newStatus = 'active'
+                newProgress = Math.min(100, (loadingProgress - 5) * 5) // 5-25% maps to 0-100%
+              }
+              break
+            case 'desktop_elements':
+              if (completedSteps.desktopCapture && desktopCaptureResult) {
+                newStatus = 'completed'
+                newProgress = 100
+              } else if (loadingProgress > 20) {
+                newStatus = 'active'
+                newProgress = Math.min(100, (loadingProgress - 20) * 10) // 20-30% maps to 0-100%
+              }
+              break
+            case 'mobile_elements':
+              if (completedSteps.mobileCapture && mobileCaptureResult) {
+                newStatus = 'completed'
+                newProgress = 100
+              } else if (loadingProgress > 20) {
+                newStatus = 'active'
+                newProgress = Math.min(100, (loadingProgress - 20) * 10) // 20-30% maps to 0-100%
+              }
+              break
+            case 'desktop_ai':
+              if (completedSteps.desktopAnalysis) {
+                newStatus = 'completed'
+                newProgress = 100
+              } else if (loadingProgress > 30) {
+                newStatus = 'active'
+                newProgress = Math.min(100, (loadingProgress - 30) * 2.5) // 30-70% maps to 0-100%
+              }
+              break
+            case 'mobile_ai':
+              if (completedSteps.mobileAnalysis) {
+                newStatus = 'completed'
+                newProgress = 100
+              } else if (loadingProgress > 30) {
+                newStatus = 'active'
+                newProgress = Math.min(100, (loadingProgress - 30) * 2.5) // 30-70% maps to 0-100%
+              }
+              break
+            case 'desktop_cro':
+              if (completedSteps.desktopOpenAI) {
+                newStatus = 'completed'
+                newProgress = 100
+              } else if (loadingProgress > 70) {
+                newStatus = 'active'
+                newProgress = Math.min(100, (loadingProgress - 70) * 5) // 70-90% maps to 0-100%
+              }
+              break
+            case 'mobile_cro':
+              if (completedSteps.mobileOpenAI) {
+                newStatus = 'completed'
+                newProgress = 100
+              } else if (loadingProgress > 70) {
+                newStatus = 'active'
+                newProgress = Math.min(100, (loadingProgress - 70) * 5) // 70-90% maps to 0-100%
+              }
+              break
+            case 'finalize':
+              if (completedSteps.finalizing || loadingProgress >= 100) {
+                newStatus = 'completed'
+                newProgress = 100
+              } else if (loadingProgress > 90) {
+                newStatus = 'active'
+                newProgress = Math.min(100, (loadingProgress - 90) * 10) // 90-100% maps to 0-100%
+              }
+              break
+          }
+          
+          return { ...step, status: newStatus, progress: newProgress }
+        })
+        
+        // Update performance metrics based on the new state
+        const completed = updated.filter(s => s.status === 'completed').length
+        const active = updated.find(s => s.status === 'active')
+        
+        setPerformanceMetrics(prev => ({
+          ...prev,
+          currentStep: active ? active.label : (completed === updated.length ? 'Complete!' : 'Processing...'),
+          stepsCompleted: completed,
+          estimatedTimeRemaining: completed > 0 ? Math.round(((Date.now() - prev.startTime) / completed) * (updated.length - completed) / 1000) : 0
+        }))
+        
+        return updated
+      })
+    }
+    
+    updateSteps()
+  }, [loadingProgress, completedSteps, desktopCaptureResult, mobileCaptureResult])
 
   // Check if a new position overlaps with existing predictions
   const checkOverlap = (newX: number, newY: number, existingPredictions: any[], minDistance = 80) => {
@@ -97,46 +252,57 @@ export default function EnhancedLoadingScreen({
     if (currentPhaseData) {
       setCurrentPhase(currentPhaseData.name)
     }
+  }, [loadingProgress])
 
+  // Separate effect for managing floating predictions to avoid infinite loops
+  useEffect(() => {
     // Use real click predictions when available, otherwise generate random ones
     const allClickPredictions = [...desktopClickPredictions, ...mobileClickPredictions]
     
-    // Start predictions immediately - don't wait for progress or screenshot
-    if (loadingProgress >= 0) {
-      // Add new predictions randomly, but not too many at once (fewer on mobile)
-      const maxPredictions = isMobile ? 4 : 8
-      if (Math.random() > 0.6 && floatingPredictions.length < maxPredictions) {
-        const position = generateNonOverlappingPosition(floatingPredictions)
-        
-        // If we have real click predictions, use them
-        if (allClickPredictions.length > 0) {
-          const randomPrediction = allClickPredictions[Math.floor(Math.random() * allClickPredictions.length)]
-          const newPrediction = {
-            id: Math.random(),
-            x: position.x,
-            y: position.y,
-            confidence: randomPrediction.confidence || Math.random() * 40 + 60,
-            text: randomPrediction.text || 'Predicted Click',
-            createdAt: Date.now(),
-            duration: 2000 + Math.random() * 3000 // Random duration between 2-5 seconds
+    // Add predictions on a timer instead of in render loop
+    const predictionInterval = setInterval(() => {
+      setFloatingPredictions(current => {
+        // Start predictions immediately - don't wait for progress or screenshot
+        if (loadingProgress >= 0) {
+          // Add new predictions randomly, but not too many at once (fewer on mobile)
+          const maxPredictions = isMobile ? 4 : 8
+          if (Math.random() > 0.6 && current.length < maxPredictions) {
+            const position = generateNonOverlappingPosition(current)
+            
+            // If we have real click predictions, use them
+            if (allClickPredictions.length > 0) {
+              const randomPrediction = allClickPredictions[Math.floor(Math.random() * allClickPredictions.length)]
+              const newPrediction = {
+                id: Math.random(),
+                x: position.x,
+                y: position.y,
+                confidence: randomPrediction.confidence || Math.random() * 40 + 60,
+                text: randomPrediction.text || 'Predicted Click',
+                createdAt: Date.now(),
+                duration: 2000 + Math.random() * 3000 // Random duration between 2-5 seconds
+              }
+              return [...current, newPrediction]
+            } else {
+              // Fallback to random predictions
+              const newPrediction = {
+                id: Math.random(),
+                x: position.x,
+                y: position.y,
+                confidence: Math.random() * 40 + 60,
+                text: 'Predicted Click',
+                createdAt: Date.now(),
+                duration: 2000 + Math.random() * 3000 // Random duration between 2-5 seconds
+              }
+              return [...current, newPrediction]
+            }
           }
-          setFloatingPredictions(prev => [...prev, newPrediction])
-        } else {
-          // Fallback to random predictions
-          const newPrediction = {
-            id: Math.random(),
-            x: position.x,
-            y: position.y,
-            confidence: Math.random() * 40 + 60,
-            text: 'Predicted Click',
-            createdAt: Date.now(),
-            duration: 2000 + Math.random() * 3000 // Random duration between 2-5 seconds
-          }
-          setFloatingPredictions(prev => [...prev, newPrediction])
         }
-      }
-    }
-  }, [loadingProgress, floatingPredictions, desktopClickPredictions, mobileClickPredictions, isMobile])
+        return current
+      })
+    }, 1000) // Check every second instead of on every render
+
+    return () => clearInterval(predictionInterval)
+  }, [loadingProgress, desktopClickPredictions, mobileClickPredictions, isMobile])
 
   // Remove predictions after their duration expires
   useEffect(() => {
@@ -148,15 +314,31 @@ export default function EnhancedLoadingScreen({
     return () => clearInterval(cleanup)
   }, [])
 
-  // Try to get website screenshot if available
+  // Try to get website screenshot if available - PRIORITIZE DESKTOP for immediate display
   useEffect(() => {
-    // Use the actual capture result screenshot when available
-    if (desktopCaptureResult?.screenshot) {
+    // 🔍 DEBUG: Log screenshot availability
+    console.log(`🔍 [LOADING-SCREEN] Screenshot check:`, {
+      hasDesktopScreenshot: !!desktopCaptureResult?.screenshot,
+      hasMobileScreenshot: !!mobileCaptureResult?.screenshot,
+      currentScreenshot: !!websiteScreenshot,
+      timestamp: new Date().toISOString()
+    })
+    
+    // PRIORITIZE desktop screenshot for immediate display
+    if (desktopCaptureResult?.screenshot && websiteScreenshot !== desktopCaptureResult.screenshot) {
+      console.log(`🔍 [LOADING-SCREEN] 📸 IMMEDIATE: Showing desktop screenshot!`, {
+        size: Math.round(desktopCaptureResult.screenshot.length / 1024) + 'KB',
+        timestamp: new Date().toISOString()
+      })
       setWebsiteScreenshot(desktopCaptureResult.screenshot)
-    } else if (mobileCaptureResult?.screenshot) {
+    } else if (mobileCaptureResult?.screenshot && !websiteScreenshot) {
+      console.log(`🔍 [LOADING-SCREEN] 📱 Showing mobile screenshot as fallback`, {
+        size: Math.round(mobileCaptureResult.screenshot.length / 1024) + 'KB',
+        timestamp: new Date().toISOString()
+      })
       setWebsiteScreenshot(mobileCaptureResult.screenshot)
-    } else if (url && !websiteScreenshot) {
-      // Only set placeholder if we don't have any screenshot yet
+    } else if (url && !websiteScreenshot && !desktopCaptureResult && !mobileCaptureResult) {
+      // Only set placeholder if we don't have any screenshot yet and no capture results
       setWebsiteScreenshot('/images/placeholder-screenshot.svg')
     }
   }, [desktopCaptureResult, mobileCaptureResult, url, websiteScreenshot])
@@ -238,23 +420,46 @@ export default function EnhancedLoadingScreen({
               </div>
 
               {/* Actual Screenshot Layer - IMMEDIATE reveal when screenshot available */}
-              <div className={`absolute inset-0 transition-opacity duration-200 ${
-                websiteScreenshot ? 'opacity-100' : 'opacity-0'
+              <div className={`absolute inset-0 transition-opacity duration-100 ${
+                websiteScreenshot && websiteScreenshot !== '/images/placeholder-screenshot.svg' ? 'opacity-100' : 'opacity-0'
               }`}>
                 {websiteScreenshot && websiteScreenshot !== '/images/placeholder-screenshot.svg' ? (
                   <img 
                     src={websiteScreenshot} 
                     alt="Website Screenshot" 
                     className="w-full h-full object-cover object-top"
+                    onLoad={() => {
+                      // 🔍 DEBUG: Log when image actually renders
+                      console.log(`🔍 [LOADING-SCREEN] 🎉 Image rendered on screen!`, {
+                        timestamp: new Date().toISOString(),
+                        loadingProgress: loadingProgress
+                      })
+                    }}
+                    onError={(e) => {
+                      // 🔍 DEBUG: Log if image fails to load
+                      console.log(`🔍 [LOADING-SCREEN] ❌ Image failed to load`, {
+                        error: e,
+                        timestamp: new Date().toISOString()
+                      })
+                    }}
                     style={{
-                      clipPath: 'inset(0 0 0% 0)' // REMOVED artificial delay - show immediately when available
+                      clipPath: 'inset(0 0 0% 0)', // REMOVED artificial delay - show immediately when available
+                      imageRendering: 'auto' // Ensure smooth rendering
                     }}
                   />
                 ) : (
                   <div className="w-full h-full bg-gradient-to-br from-blue-50 to-indigo-50 flex items-center justify-center">
                     <div className="text-center text-gray-500 p-4">
                       <div className="w-12 h-12 sm:w-16 sm:h-16 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-2 sm:mb-4"></div>
-                      <p className="text-sm sm:text-base">Loading website screenshot...</p>
+                      <p className="text-sm sm:text-base">
+                        {loadingProgress > 5 ? 'Processing screenshot...' : 'Loading website screenshot...'}
+                      </p>
+                      {/* 🔍 DEBUG: Show loading state details */}
+                      {process.env.NODE_ENV === 'development' && (
+                        <p className="text-xs text-gray-400 mt-2">
+                          Progress: {loadingProgress}% | Stage: {loadingStage}
+                        </p>
+                      )}
                     </div>
                   </div>
                 )}
@@ -360,13 +565,62 @@ export default function EnhancedLoadingScreen({
                 </div>
               )}
 
-              {/* Current Stage Display - Responsive */}
-              <div className="absolute top-2 sm:top-4 left-2 sm:left-4 bg-white/95 backdrop-blur rounded-lg p-2 sm:p-3 lg:p-4 border border-blue-200 shadow-lg max-w-[200px] sm:max-w-none">
-                <div className="text-xs sm:text-sm font-semibold text-gray-900 mb-1">Current Stage</div>
-                <div className="text-xs text-blue-600 font-medium">{loadingStage}</div>
-                <div className="text-xs text-gray-500 mt-1">
-                  {completedSteps.desktopCapture && completedSteps.desktopAnalysis ? '✅ Desktop' : '⏳ Desktop'} | 
-                  {completedSteps.mobileCapture && completedSteps.mobileAnalysis ? ' ✅ Mobile' : ' ⏳ Mobile'}
+              {/* Enhanced Progress Panel - Responsive */}
+              <div className="absolute top-2 sm:top-4 left-2 sm:left-4 bg-white/95 backdrop-blur rounded-lg p-2 sm:p-3 lg:p-4 border border-blue-200 shadow-lg max-w-[280px] sm:max-w-none">
+                <div className="text-xs sm:text-sm font-semibold text-gray-900 mb-2">Analysis Progress</div>
+                <div className="text-xs text-blue-600 font-medium mb-2">{performanceMetrics.currentStep}</div>
+                
+                {/* Detailed Steps List */}
+                <div className="space-y-1 max-h-32 overflow-y-auto">
+                  {detailedSteps.map((step, index) => (
+                    <div key={step.id} className="flex items-center gap-2 text-xs">
+                      {/* Status Icon */}
+                      <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                        step.status === 'completed' ? 'bg-green-500' :
+                        step.status === 'active' ? 'bg-blue-500 animate-pulse' :
+                        step.status === 'failed' ? 'bg-red-500' :
+                        'bg-gray-300'
+                      }`} />
+                      
+                      {/* Step Label */}
+                      <span className={`flex-1 truncate ${
+                        step.status === 'completed' ? 'text-gray-700' :
+                        step.status === 'active' ? 'text-blue-700 font-medium' :
+                        'text-gray-500'
+                      }`}>
+                        {step.label}
+                      </span>
+                      
+                      {/* Device Type Indicator */}
+                      <span className={`text-xs px-1 rounded ${
+                        step.deviceType === 'desktop' ? 'bg-blue-100 text-blue-600' :
+                        step.deviceType === 'mobile' ? 'bg-green-100 text-green-600' :
+                        'bg-gray-100 text-gray-600'
+                      }`}>
+                        {step.deviceType === 'desktop' ? '🖥️' : 
+                         step.deviceType === 'mobile' ? '📱' : '⚡'}
+                      </span>
+                      
+                      {/* Progress Bar for Active Steps */}
+                      {step.status === 'active' && (
+                        <div className="w-8 bg-gray-200 rounded-full h-1">
+                          <div 
+                            className="bg-blue-500 h-1 rounded-full transition-all duration-300"
+                            style={{ width: `${step.progress}%` }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                
+                {/* Performance Summary */}
+                <div className="mt-2 pt-2 border-t border-gray-200 text-xs text-gray-600">
+                  <div>Progress: {performanceMetrics.stepsCompleted}/{performanceMetrics.totalSteps} steps</div>
+                  <div>Elapsed: {Math.round((Date.now() - performanceMetrics.startTime) / 1000)}s</div>
+                  {performanceMetrics.estimatedTimeRemaining > 0 && (
+                    <div>ETA: ~{performanceMetrics.estimatedTimeRemaining}s</div>
+                  )}
                 </div>
               </div>
             </div>
