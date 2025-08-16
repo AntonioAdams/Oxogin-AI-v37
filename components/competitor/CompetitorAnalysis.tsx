@@ -147,9 +147,16 @@ export function CompetitorAnalysis({ originalData, competitorData, onCompetitorU
     competitorMetrics.overallScore = calculateOverallScore(competitorMetrics)
   }
 
-  // Determine winner based on overall score
-  const isWinning = competitorMetrics ? originalMetrics.overallScore > competitorMetrics.overallScore : true
-  const advantage = competitorMetrics ? Math.abs(originalMetrics.overallScore - competitorMetrics.overallScore) / Math.max(competitorMetrics.overallScore, 0.1) * 100 : 0
+  // Determine winner based on CURRENT CTR (conversion rate) - higher CTR wins
+  const isWinning = competitorMetrics ? (originalMetrics.currentCTR || 0) > (competitorMetrics.currentCTR || 0) : true
+  const advantage = competitorMetrics ? Math.abs((originalMetrics.currentCTR || 0) - (competitorMetrics.currentCTR || 0)) * 100 : 0
+  
+  console.log('🎯 [COMPETITOR-COLOR-LOGIC] CTR-based comparison:', {
+    originalCTR: (originalMetrics.currentCTR || 0) * 100,
+    competitorCTR: (competitorMetrics?.currentCTR || 0) * 100,
+    isWinning,
+    advantage: advantage.toFixed(2) + '% difference'
+  })
 
   // Generate action items based on CRO analysis friction points
   const getActionItems = () => {
